@@ -6,13 +6,10 @@ from dotenv import load_dotenv
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import fitz  # PyMuPDF
+import fitz  
 from groq import Groq
 
-# Import your polished service
 from services.speech_and_vision import SarvamManager
-
-# --- Setup & Configuration ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
