@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Upload, CheckCircle, AlertCircle, Pill, ShieldAlert } from 'lucide-react';
+import { Upload, AlertCircle, Pill, ShieldAlert } from 'lucide-react';
+import Voice from './Voice'; 
+import Vision from './Vision';
 
 function App() {
   const [file, setFile] = useState(null);
@@ -19,7 +21,6 @@ function App() {
 
     try {
       const response = await axios.post('http://localhost:8000/api/scan', formData);
-      // Ensure we set only the extracted data to state
       setResult(response.data);
     } catch (err) {
       console.error("Connection failed", err);
@@ -33,11 +34,12 @@ function App() {
     <div className="min-h-screen bg-slate-50 p-8 flex flex-col items-center font-sans">
       <header className="mb-10 text-center">
         <h1 className="text-4xl font-bold text-blue-900">SurgiSense AI</h1>
-        <p className="text-slate-500 italic">End-to-End Surgical Safety Ecosystem [cite: 12]</p>
+        <p className="text-slate-500 italic">End-to-End Surgical Safety Ecosystem</p>
       </header>
 
-      {/* Upload Section */}
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+      {/* Main Container */}
+      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
+        {/* Step 1: Document Scan */}
         <div className="border-2 border-dashed border-blue-200 rounded-xl p-10 flex flex-col items-center">
           <Upload className="text-blue-500 mb-4" size={48} />
           <input 
@@ -52,8 +54,20 @@ function App() {
           disabled={loading}
           className="w-full mt-6 bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-all disabled:bg-slate-400"
         >
-          {loading ? "Digitizing Record..." : "Scan & Go [cite: 15]"}
+          {loading ? "Digitizing Record..." : "Scan & Go"}
         </button>
+
+        {/* Step 2: AI Inputs (Voice & Vision Side-by-Side) */}
+        <div className="mt-8 pt-8 border-t border-slate-100">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="flex flex-col">
+                <Voice />
+              </div>
+              <div className="flex flex-col border-l border-slate-100 md:pl-8">
+                <Vision />
+              </div>
+           </div>
+        </div>
 
         {error && (
           <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center text-red-700 text-sm">
