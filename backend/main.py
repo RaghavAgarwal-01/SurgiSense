@@ -52,7 +52,7 @@ async def scan_document(file: UploadFile = File(...)):
             try:
                 doc = fitz.open(stream=content, filetype="pdf")
                 for page in doc:
-                    text_content += page.get_text()
+                    text_content += str(page.get_text())
                 doc.close()
             except Exception as e:
                 raise HTTPException(status_code=400, detail="Invalid PDF structure.")
@@ -77,7 +77,10 @@ async def scan_document(file: UploadFile = File(...)):
             model="llama-3.3-70b-versatile", # Ensure you use a valid Groq model name
             response_format={"type": "json_object"}
         )
-        extracted_data = json.loads(chat_completion.choices[0].message.content) 
+        raw_ai_response = chat_completion.choices[0].message.content
+        if not raw_ai_response:
+            raise HTTPException(status_code=500, detail="AI returned an empty response.")
+        extracted_data = json.loads(raw_ai_response) 
         return {"status": "success", "data": extracted_data}
 
     except Exception as e:
