@@ -1,3 +1,73 @@
+.env
+.env*
+*.pem
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Virtual Environments
+venv/
+env/
+.venv/
+activate/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary App Files
+temp_audio.wav
+*.wav
+*.mp3
+
+# Pytest / Coverage (if you add tests later)
+.pytest_cache/
+.coverage
+
+# pip/setuptools
+*.egg-info/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+
+# Node modules
+frontend/node_modules/
+node_modules/
+/.pnp
+.pnp.js
+
+# Build outputs
+frontend/dist/
+frontend/build/
+dist/
+build/
+coverage/
+
+# npm/yarn debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+*.local
+
+# =========================
+# 4. OS & Editor Files
+# =========================
+# VS Code
+.vscode/
+
+# Mac / Windows system files
+.DS_Store
+Thumbs.db
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
 venv/
 activate/
 __pycache__/
