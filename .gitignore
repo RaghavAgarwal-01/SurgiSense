@@ -1,36 +1,76 @@
 .env
-# dependency directories
+.env*
+*.pem
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Virtual Environments
+venv/
+env/
+.venv/
+activate/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary App Files
+temp_audio.wav
+*.wav
+*.mp3
+
+# Pytest / Coverage (if you add tests later)
+.pytest_cache/
+.coverage
+
+# pip/setuptools
+*.egg-info/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+
+# Node modules
+frontend/node_modules/
 node_modules/
-jspm_packages/
+/.pnp
+.pnp.js
 
-# Optional npm cache directory
-.npm
-
-# build
+# Build outputs
+frontend/dist/
+frontend/build/
 dist/
 build/
+coverage/
 
-# Logs
-logs
-*.log
+# npm/yarn debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Misc
 *.local
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# =========================
+# 4. OS & Editor Files
+# =========================
+# VS Code
+.vscode/
+
+# Mac / Windows system files
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+venv/
+activate/
+__pycache__/
+node_modules/
+.env
+backup.env
