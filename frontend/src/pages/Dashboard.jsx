@@ -1,4 +1,5 @@
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Heart,
   CheckCircle,
@@ -16,8 +17,14 @@ import {
 } from "lucide-react";
 import { Progress } from "../components/ui/Progress";
 import Vision from "../Vision";
+import axios from "axios";
+import { useState } from "react";
+const API_BASE = "http://localhost:8000";
+
 
 export default function Dashboard() {
+  const [digitizedData, setDigitizedData] = useState(null);
+const [loadingRecord, setLoadingRecord] = useState(false);
   const recoveryData = {
     patientName: "Margaret Johnson",
     surgeryType: "Hip Replacement",
@@ -25,7 +32,25 @@ export default function Dashboard() {
     totalDays: 90,
     progress: 9,
   };
+const handleDischargeUpload = async (file) => {
+  if (!file) return;
 
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    setLoadingRecord(true);
+    const res = await axios.post(
+      `${API_BASE}/api/digitize-record`,
+      formData
+    );
+    setDigitizedData(res.data.data);
+  } catch (err) {
+    console.error("Digitization failed", err);
+  } finally {
+    setLoadingRecord(false);
+  }
+};
   const timelineTasks = [
     { id: 1, title: "Morning Medication", time: "8:00 AM", status: "completed", type: "medication" },
     { id: 2, title: "Wound Care & Cleaning", time: "9:30 AM", status: "completed", type: "wound" },
@@ -34,15 +59,17 @@ export default function Dashboard() {
     { id: 5, title: "Temperature Check", time: "8:00 PM", status: "alert", type: "vital" },
   ];
 
-  const dischargeInfo = [
-    { label: "Surgery Date", value: "Feb 7, 2026" },
-    { label: "Surgeon", value: "Dr. Sarah Martinez" },
-    { label: "Hospital", value: "St. Mary's Medical Center" },
-    { label: "Follow-up", value: "Feb 22, 2026" },
-    { label: "Current Medications", value: "3 prescriptions" },
-    { label: "Restrictions", value: "No weight bearing on left leg" },
-  ];
-
+const dischargeInfo = digitizedData
+  ? [
+      { label: "Procedure", value: digitizedData.procedure || "—" },
+      { label: "Follow-up Date", value: digitizedData.follow_up_date || "—" },
+      { label: "Doctor", value: digitizedData.doctor || "—" },
+      {
+        label: "Medications",
+        value: `${digitizedData.medications?.length || 0} prescriptions`,
+      },
+    ]
+  : [];
   const medications = [
     { name: "Acetaminophen 500mg", dosage: "2 tablets every 6 hours", refillDue: "3 days", status: "low" },
     { name: "Antibiotic (Cephalexin)", dosage: "1 capsule twice daily", refillDue: "7 days", status: "normal" },
@@ -154,23 +181,52 @@ export default function Dashboard() {
         </section>
 
         {/* Digitized Discharge Summary */}
-        <section className="bg-white rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-6 h-6 text-[#3E435D]" />
-            <h2 className="text-[#3E435D] text-2xl font-semibold">Discharge Summary</h2>
+      <section className="bg-white rounded-2xl p-6 shadow-sm">
+  <div className="flex items-center gap-2 mb-4">
+    <FileText className="w-6 h-6 text-[#3E435D]" />
+    <h2 className="text-[#3E435D] text-2xl font-semibold">
+      Discharge Summary
+    </h2>
+  </div>
+
+  {!digitizedData && (
+    <div className="border-2 border-dashed border-[#CBC3A5] rounded-xl p-6 text-center">
+      <p className="text-[#3E435D] font-medium mb-2">
+        Upload Discharge Summary (PDF)
+      </p>
+      <input
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        id="discharge-upload"
+        onChange={(e) => handleDischargeUpload(e.target.files[0])}
+      />
+      <label
+        htmlFor="discharge-upload"
+        className="inline-block mt-2 bg-[#3E435D] text-[#D3D0BC] px-6 py-2 rounded-xl cursor-pointer hover:opacity-90"
+      >
+        {loadingRecord ? "Processing..." : "Upload & Digitize"}
+      </label>
+    </div>
+  )}
+
+  {digitizedData && (
+    <>
+      <div className="grid md:grid-cols-2 gap-4">
+        {dischargeInfo.map((item, index) => (
+          <div key={index} className="border-b border-[#CBC3A5] pb-3">
+            <p className="text-[#9AA7B1] text-sm mb-1">{item.label}</p>
+            <p className="text-[#3E435D] font-semibold">{item.value}</p>
           </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            {dischargeInfo.map((item, index) => (
-              <div key={index} className="border-b border-[#CBC3A5] pb-3">
-                <p className="text-[#9AA7B1] text-sm mb-1">{item.label}</p>
-                <p className="text-[#3E435D] font-semibold">{item.value}</p>
-              </div>
-            ))}
-          </div>
-          <button className="mt-4 text-[#3E435D] font-medium flex items-center gap-1 hover:gap-2 transition-all">
-            View Full Document <ChevronRight className="w-5 h-5" />
-          </button>
-        </section>
+        ))}
+      </div>
+
+      <button className="mt-4 text-[#3E435D] font-medium flex items-center gap-1 hover:gap-2 transition-all">
+        AI-Parsed from Discharge PDF <ChevronRight className="w-5 h-5" />
+      </button>
+    </>
+  )}
+</section>
 
         {/* Wound Analysis Section */}
         <section id="wound" className="scroll-mt-20">

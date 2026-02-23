@@ -2,11 +2,14 @@ import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import { Mic, Square, Loader2, MessageSquare, AlertCircle } from 'lucide-react';
 
+const API_BASE = "http://localhost:8000";
+
 const Voice = () => {
     const [recording, setRecording] = useState(false);
     const [transcript, setTranscript] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+
     const mediaRecorder = useRef(null);
     const audioChunks = useRef([]);
 
@@ -14,42 +17,57 @@ const Voice = () => {
         try {
             setError("");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
             mediaRecorder.current = new MediaRecorder(stream);
             audioChunks.current = [];
-            
-            mediaRecorder.current.ondataavailable = (event) => {
-                audioChunks.current.push(event.data);
+
+            mediaRecorder.current.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunks.current.push(e.data);
             };
-            
+
             mediaRecorder.current.onstop = async () => {
-                const audioBlob = new Blob(audioChunks.current, { type: 'audio/wav' });
+                const audioBlob = new Blob(audioChunks.current, { type: "audio/wav" });
                 await sendToBackend(audioBlob);
             };
-            
+
             mediaRecorder.current.start();
             setRecording(true);
-        } catch (err) {
-            setError("Microphone access denied. Please allow permissions.");
+        } catch {
+            setError("Microphone permission denied.");
         }
     };
 
     const stopRecording = () => {
-        if (mediaRecorder.current && recording) {
-            mediaRecorder.current.stop();
-            setRecording(false);
-        }
+        if (!mediaRecorder.current) return;
+        mediaRecorder.current.stop();
+        setRecording(false);
     };
 
     const sendToBackend = async (audioBlob) => {
         setLoading(true);
+        setError("");
+
         const formData = new FormData();
         formData.append("file", audioBlob, "recording.wav");
-        
+
         try {
-            const response = await axios.post("http://localhost:8000/api/voice-to-text", formData);
+            const response = await axios.post(
+                `${API_BASE}/api/voice-to-text`,
+                formData,
+                { headers: { "Content-Type": "multipart/form-data" } }
+            );
+
+            if (!response.data?.transcript) {
+                throw new Error("Invalid transcription response");
+            }
+
             setTranscript(response.data.transcript);
         } catch (err) {
-            setError("Failed to connect to the speech service.");
+            console.error(err);
+            setError(
+                err.response?.data?.detail ||
+                "Speech service unreachable."
+            );
         } finally {
             setLoading(false);
         }

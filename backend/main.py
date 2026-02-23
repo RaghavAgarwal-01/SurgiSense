@@ -3,20 +3,22 @@ import json
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+print("Loading env from:", ENV_PATH)  # temporary debug
+load_dotenv(dotenv_path=ENV_PATH)
+
+from fastapi import FastAPI, UploadFile, File, HTTPException 
 from fastapi.middleware.cors import CORSMiddleware
 import fitz  
 from groq import Groq
-
-from services.speech_to_text import SpeechToTextService
-from services.wound_analysis import WoundAnalysisService
-
+from backend.services.record_digitization import digitize_discharge_summary
+from backend.services.speech_to_text import SpeechToTextService
+from backend.services.wound_analysis import WoundAnalysisService
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-env_path = Path(__file__).resolve().parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
 
 app = FastAPI(title="SurgiSense AI Backend")
 
@@ -28,7 +30,7 @@ app.add_middleware(
 )
 
 # Initialize Groq Client (for document scanning)
-GROQ_KEY = os.getenv('GROQ_KEY')
+GROQ_KEY = os.getenv('GROQ_API_KEY')
 if not GROQ_KEY:
     logger.error("GROQ_KEY missing!")
 client = Groq(api_key=GROQ_KEY)
@@ -106,3 +108,9 @@ async def process_wound(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Vision Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Image analysis failed.")
+    
+@app.post("/api/digitize-record")
+async def digitize_record(file: UploadFile = File(...)):
+    file_bytes = await file.read()
+    result = digitize_discharge_summary(file_bytes)
+    return {"data": result}
