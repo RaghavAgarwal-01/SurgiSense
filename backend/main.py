@@ -138,7 +138,39 @@ async def digitize_record(file: UploadFile = File(...)):
         logger.error(f"Failed to ingest for RAG: {e}")
 
     return {"data": result}
+class TaskGenerationRequest(BaseModel):
+    document_text: str
 
+@app.post("/api/generate-tasks")
+async def generate_tasks(request: TaskGenerationRequest):
+    """Dynamically generates a daily recovery schedule based on the medical document."""
+    try:
+        prompt = f"""You are a clinical care coordinator. Based on the medical discharge summary provided below, generate a realistic, personalized daily schedule for the patient's recovery today. 
+        Include specific medication dosages, wound care, and physical activity/rest based ONLY on the text.
+        
+        Return ONLY a JSON object with a 'tasks' array. Each task must have:
+        - 'id': integer (1, 2, 3...)
+        - 'title': string (e.g., "Take Cephalexin 500mg")
+        - 'time': string (e.g., "08:00 AM", "02:00 PM")
+        - 'status': string (must be exactly "pending")
+
+        Medical Document:
+        {request.document_text}
+        """
+
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.3-70b-versatile",
+            response_format={"type": "json_object"},
+            temperature=0.2
+        )
+        
+        tasks_data = json.loads(response.choices[0].message.content)
+        return {"status": "success", "tasks": tasks_data.get("tasks", [])}
+    
+    except Exception as e:
+        logger.error(f"Task Generation Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate tasks.")
 class ChatRequest(BaseModel):
     question: str 
 
