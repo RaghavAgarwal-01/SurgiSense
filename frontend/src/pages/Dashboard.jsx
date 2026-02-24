@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Heart,
   CheckCircle,
@@ -16,10 +16,15 @@ import {
   Home,
 } from "lucide-react";
 import { Progress } from "../components/ui/Progress";
+import Vision from "../Vision";
+import axios from "axios";
+import { useState } from "react";
+const API_BASE = "http://localhost:8000";
+
 
 export default function Dashboard() {
-  const [selectedImage, setSelectedImage] = useState(null);
-
+  const [digitizedData, setDigitizedData] = useState(null);
+const [loadingRecord, setLoadingRecord] = useState(false);
   const recoveryData = {
     patientName: "Margaret Johnson",
     surgeryType: "Hip Replacement",
@@ -27,7 +32,25 @@ export default function Dashboard() {
     totalDays: 90,
     progress: 9,
   };
+const handleDischargeUpload = async (file) => {
+  if (!file) return;
 
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    setLoadingRecord(true);
+    const res = await axios.post(
+      `${API_BASE}/api/digitize-record`,
+      formData
+    );
+    setDigitizedData(res.data.data);
+  } catch (err) {
+    console.error("Digitization failed", err);
+  } finally {
+    setLoadingRecord(false);
+  }
+};
   const timelineTasks = [
     { id: 1, title: "Morning Medication", time: "8:00 AM", status: "completed", type: "medication" },
     { id: 2, title: "Wound Care & Cleaning", time: "9:30 AM", status: "completed", type: "wound" },
@@ -36,31 +59,22 @@ export default function Dashboard() {
     { id: 5, title: "Temperature Check", time: "8:00 PM", status: "alert", type: "vital" },
   ];
 
-  const dischargeInfo = [
-    { label: "Surgery Date", value: "Feb 7, 2026" },
-    { label: "Surgeon", value: "Dr. Sarah Martinez" },
-    { label: "Hospital", value: "St. Mary's Medical Center" },
-    { label: "Follow-up", value: "Feb 22, 2026" },
-    { label: "Current Medications", value: "3 prescriptions" },
-    { label: "Restrictions", value: "No weight bearing on left leg" },
-  ];
-
+const dischargeInfo = digitizedData
+  ? [
+      { label: "Procedure", value: digitizedData.procedure || "—" },
+      { label: "Follow-up Date", value: digitizedData.follow_up_date || "—" },
+      { label: "Doctor", value: digitizedData.doctor || "—" },
+      {
+        label: "Medications",
+        value: `${digitizedData.medications?.length || 0} prescriptions`,
+      },
+    ]
+  : [];
   const medications = [
     { name: "Acetaminophen 500mg", dosage: "2 tablets every 6 hours", refillDue: "3 days", status: "low" },
     { name: "Antibiotic (Cephalexin)", dosage: "1 capsule twice daily", refillDue: "7 days", status: "normal" },
     { name: "Blood Thinner (Apixaban)", dosage: "1 tablet daily", refillDue: "15 days", status: "normal" },
   ];
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImage(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-[#D3D0BC]">
@@ -167,92 +181,56 @@ export default function Dashboard() {
         </section>
 
         {/* Digitized Discharge Summary */}
-        <section className="bg-white rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-6 h-6 text-[#3E435D]" />
-            <h2 className="text-[#3E435D] text-2xl font-semibold">Discharge Summary</h2>
+      <section className="bg-white rounded-2xl p-6 shadow-sm">
+  <div className="flex items-center gap-2 mb-4">
+    <FileText className="w-6 h-6 text-[#3E435D]" />
+    <h2 className="text-[#3E435D] text-2xl font-semibold">
+      Discharge Summary
+    </h2>
+  </div>
+
+  {!digitizedData && (
+    <div className="border-2 border-dashed border-[#CBC3A5] rounded-xl p-6 text-center">
+      <p className="text-[#3E435D] font-medium mb-2">
+        Upload Discharge Summary (PDF)
+      </p>
+      <input
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        id="discharge-upload"
+        onChange={(e) => handleDischargeUpload(e.target.files[0])}
+      />
+      <label
+        htmlFor="discharge-upload"
+        className="inline-block mt-2 bg-[#3E435D] text-[#D3D0BC] px-6 py-2 rounded-xl cursor-pointer hover:opacity-90"
+      >
+        {loadingRecord ? "Processing..." : "Upload & Digitize"}
+      </label>
+    </div>
+  )}
+
+  {digitizedData && (
+    <>
+      <div className="grid md:grid-cols-2 gap-4">
+        {dischargeInfo.map((item, index) => (
+          <div key={index} className="border-b border-[#CBC3A5] pb-3">
+            <p className="text-[#9AA7B1] text-sm mb-1">{item.label}</p>
+            <p className="text-[#3E435D] font-semibold">{item.value}</p>
           </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            {dischargeInfo.map((item, index) => (
-              <div key={index} className="border-b border-[#CBC3A5] pb-3">
-                <p className="text-[#9AA7B1] text-sm mb-1">{item.label}</p>
-                <p className="text-[#3E435D] font-semibold">{item.value}</p>
-              </div>
-            ))}
-          </div>
-          <button className="mt-4 text-[#3E435D] font-medium flex items-center gap-1 hover:gap-2 transition-all">
-            View Full Document <ChevronRight className="w-5 h-5" />
-          </button>
-        </section>
+        ))}
+      </div>
+
+      <button className="mt-4 text-[#3E435D] font-medium flex items-center gap-1 hover:gap-2 transition-all">
+        AI-Parsed from Discharge PDF <ChevronRight className="w-5 h-5" />
+      </button>
+    </>
+  )}
+</section>
 
         {/* Wound Analysis Section */}
-        <section id="wound" className="bg-white rounded-2xl p-6 shadow-sm scroll-mt-20">
-          <div className="flex items-center gap-2 mb-4">
-            <Camera className="w-6 h-6 text-[#3E435D]" />
-            <h2 className="text-[#3E435D] text-2xl font-semibold">Wound Analysis</h2>
-          </div>
-          
-          {!selectedImage ? (
-            <label className="block border-2 border-dashed border-[#9AA7B1] rounded-2xl p-8 text-center cursor-pointer hover:border-[#3E435D] transition-colors">
-              <Camera className="w-12 h-12 text-[#9AA7B1] mx-auto mb-3" />
-              <p className="text-[#3E435D] font-medium mb-1">Upload Wound Photo</p>
-              <p className="text-[#9AA7B1] text-sm">Tap to take or select a photo</p>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handleImageUpload}
-              />
-            </label>
-          ) : (
-            <div className="space-y-4">
-              <div className="rounded-2xl overflow-hidden">
-                <img src={selectedImage} alt="Wound" className="w-full h-auto" />
-              </div>
-              
-              {/* AI Analysis Result */}
-              <div className="bg-[#9AA7B1]/10 rounded-2xl p-4 border-2 border-[#9AA7B1]">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="bg-[#9AA7B1] text-white px-3 py-1 rounded-lg text-sm font-semibold">
-                    AI Analysis
-                  </div>
-                  <CheckCircle className="w-5 h-5 text-[#9AA7B1]" />
-                  <span className="text-[#3E435D] font-semibold">Normal Healing</span>
-                </div>
-                <p className="text-[#3E435D] mb-3">
-                  Your incision appears to be healing well with no signs of infection. Continue current care routine.
-                </p>
-                <div className="mb-2">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-[#9AA7B1]">Confidence</span>
-                    <span className="text-[#3E435D] font-semibold">94%</span>
-                  </div>
-                  <Progress value={94} className="h-2" />
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSelectedImage(null)}
-                className="w-full border-2 border-[#3E435D] text-[#3E435D] py-3 rounded-2xl font-medium hover:bg-[#3E435D] hover:text-[#D3D0BC] transition-colors"
-              >
-                Upload New Photo
-              </button>
-            </div>
-          )}
-
-          {/* Safety Note */}
-          <div className="mt-4 bg-[#3E435D] rounded-2xl p-4">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-[#CBC3A5] shrink-0 mt-0.5" />
-              <div>
-                <p className="text-[#D3D0BC] font-semibold mb-1">Medical Guidance</p>
-                <p className="text-[#9AA7B1] text-sm">
-                  AI analysis is for informational purposes only. Contact your healthcare provider if you have concerns.
-                </p>
-              </div>
-            </div>
-          </div>
+        <section id="wound" className="scroll-mt-20">
+          <Vision />
         </section>
 
         {/* Medications Preview */}

@@ -3,8 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+<<<<<<< HEAD
     "@radix-ui/react-progress": "^1.1.8",
     "@tailwindcss/vite": "^4.2.0",
+=======
+    "4": "^0.0.0",
+    "@radix-ui/react-progress": "^1.1.8",
+>>>>>>> 7ac69b51b8bf7f6b16a24d4a8b2f13621ade9366
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -16,6 +21,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
+<<<<<<< HEAD
     "react-router": "^7.13.0",
     "react-scripts": "5.0.1",
     "tailwind-merge": "^3.5.0",
@@ -26,6 +32,19 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
+=======
+    "react-router-dom": "^7.13.0",
+    "react-scripts": "5.0.1",
+    "tailwind-merge": "^3.5.0",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "dev": "vite"
+>>>>>>> 7ac69b51b8bf7f6b16a24d4a8b2f13621ade9366
   },
   "eslintConfig": {
     "extends": [
@@ -44,5 +63,11 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.0",
+    "@vitejs/plugin-react": "^5.1.4",
+    "tailwindcss": "^4.2.0",
+    "vite": "^7.3.1"
   }
 }

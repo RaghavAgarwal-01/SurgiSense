@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { Eye, UploadCloud, Loader2, FileWarning, Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
 
+const API_BASE = "http://localhost:8000";
+
 const Vision = () => {
     const [preview, setPreview] = useState(null);
     const [file, setFile] = useState(null);
@@ -12,43 +14,52 @@ const Vision = () => {
 
     const handleFileSelect = (e) => {
         const selectedFile = e.target.files[0];
-        if (selectedFile) {
-            setFile(selectedFile);
-            setPreview(URL.createObjectURL(selectedFile));
-            setAnalysis(""); 
-            setError("");
-        }
+        if (!selectedFile) return;
+
+        setFile(selectedFile);
+        setPreview(URL.createObjectURL(selectedFile));
+        setAnalysis("");
+        setError("");
     };
 
     const handleAnalyze = async () => {
         if (!file) return;
-        
+
         setLoading(true);
         setError("");
+
         const formData = new FormData();
         formData.append("file", file);
 
         try {
-            const response = await axios.post("http://localhost:8000/api/analyze-wound", formData);
+            const response = await axios.post(
+                `${API_BASE}/api/analyze-wound`,
+                formData,
+                { headers: { "Content-Type": "multipart/form-data" } }
+            );
+
+            if (!response.data?.analysis) {
+                throw new Error("Invalid response from server");
+            }
+
             setAnalysis(response.data.analysis);
         } catch (err) {
-            setError("Failed to analyze the image. Ensure the backend is running.");
+            console.error(err);
+            setError(
+                err.response?.data?.detail ||
+                "Failed to analyze the image. Backend not reachable."
+            );
         } finally {
             setLoading(false);
         }
     };
 
-    // Helper function to extract the score and determine UI colors
-// Helper function to extract the score and determine UI colors
     const getSeverityDetails = (text) => {
-        // This upgraded Regex looks for "X/10", "X out of 10", "\boxed{X}", or "Score: X"
-        const match = text.match(/(\d+)\s*(?:\/|out of)\s*10|\\boxed\{(\d+)\}/i) 
-                   || text.match(/(?:severity|score)[\s:]*(\d+)/i);
-        
-        // Grab the number from whichever regex pattern caught it
+        const match =
+            text.match(/(\d+)\s*(?:\/|out of)\s*10|\\boxed\{(\d+)\}/i) ||
+            text.match(/(?:severity|score)[\s:]*(\d+)/i);
+
         const score = match ? parseInt(match[1] || match[2], 10) : null;
-        
-        // Safety check to ensure we got a valid 1-10 number
         if (!score || score < 1 || score > 10) return null;
 
         if (score <= 3) return { score, color: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Low Risk', icon: ShieldCheck };
@@ -57,7 +68,6 @@ const Vision = () => {
     };
 
     const severity = analysis ? getSeverityDetails(analysis) : null;
-
     return (
         <div className="w-full bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-full flex flex-col">
             <h3 className="text-lg font-bold text-blue-900 mb-2 flex items-center justify-center gap-2">
