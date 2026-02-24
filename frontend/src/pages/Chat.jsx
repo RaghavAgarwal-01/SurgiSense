@@ -1,30 +1,22 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router";
+import { Link } from "react-router"; // Note: In newer React Router, this is usually 'react-router-dom'
 import { Heart, Send, Mic, AlertTriangle, Shield, ChevronLeft, Volume2 } from "lucide-react";
 
 export default function Chat() {
+  // 1. Cleaned up initial messages to just a single welcome prompt
   const [messages, setMessages] = useState([
     {
       id: "1",
       type: "ai",
-      content: "Hello Margaret! I'm your AI Recovery Assistant. I'm here to help with questions about your hip replacement recovery. How are you feeling today?",
-      timestamp: new Date(Date.now() - 1000 * 60 * 5),
-    },
-    {
-      id: "2",
-      type: "user",
-      content: "I'm having some pain in my hip when I try to walk. Is this normal?",
-      timestamp: new Date(Date.now() - 1000 * 60 * 3),
-    },
-    {
-      id: "3",
-      type: "ai",
-      content: "Some discomfort during the first few weeks after hip replacement surgery is normal, especially when walking. However, let me ask you a few questions to better understand your situation:\n\n• On a scale of 1-10, how would you rate the pain?\n• Is the pain sharp or dull?\n• Have you taken your prescribed pain medication today?",
-      timestamp: new Date(Date.now() - 1000 * 60 * 2),
+      content: "Hello! I'm your SurgiSense Clinical Assistant. I have analyzed your medical document. What would you like to know?",
+      timestamp: new Date(),
     },
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  
+  // 2. Added a loading state so the user knows the AI is thinking
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -33,31 +25,54 @@ export default function Chat() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, isLoading]);
 
-  const handleSendMessage = () => {
+  // 3. Upgraded to async function to talk to your real Python backend
+  const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
+    const userText = inputValue;
     const userMessage = {
       id: Date.now().toString(),
       type: "user",
-      content: inputValue,
+      content: userText,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
+    setIsLoading(true);
 
-    // Simulate AI response with safety layer
-    setTimeout(() => {
-      const aiResponse = {
+    try {
+      // 4. Send the question to your local FastAPI server!
+      const response = await fetch('http://localhost:8000/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: userText }),
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        setMessages((prev) => [...prev, {
+          id: (Date.now() + 1).toString(),
+          type: "ai",
+          content: data.answer,
+          timestamp: new Date(),
+        }]);
+      } else {
+        throw new Error("Backend returned an error");
+      }
+    } catch (error) {
+      setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
-        type: "ai",
-        content: "Based on what you've described, mild to moderate pain is expected during recovery. Make sure to:\n\n✓ Take your pain medication as prescribed\n✓ Use ice packs for 15-20 minutes\n✓ Elevate your leg when resting\n✓ Avoid putting full weight on your leg\n\nIf your pain level exceeds 7/10 or you notice swelling, redness, or fever, please contact your doctor immediately.",
+        type: "error", // Using your safety alert UI for errors
+        content: "Network error. Please make sure your FastAPI backend is running and you have scanned a document.",
         timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiResponse]);
-    }, 1500);
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKeyPress = (e) => {
@@ -70,7 +85,7 @@ export default function Chat() {
   const toggleRecording = () => {
     setIsRecording(!isRecording);
     if (!isRecording) {
-      // Simulate voice recording
+      // Simulate voice recording for now (you can hook this up to your voice API later!)
       setTimeout(() => {
         setIsRecording(false);
         setInputValue("Can I start putting more weight on my leg?");
@@ -79,10 +94,10 @@ export default function Chat() {
   };
 
   const exampleQuestions = [
-    "When can I shower?",
-    "What exercises should I do?",
-    "Is swelling normal?",
-    "When can I drive again?",
+    "What medications was the patient prescribed?",
+    "Are there any pre-op restrictions?",
+    "What is the surgery date?",
+    "What type of surgery was performed?",
   ];
 
   return (
@@ -153,7 +168,7 @@ export default function Chat() {
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="w-6 h-6 text-[#CBC3A5] shrink-0 mt-1" />
                       <div>
-                        <p className="font-semibold mb-2">⚠️ Safety Alert</p>
+                        <p className="font-semibold mb-2">⚠️ Alert</p>
                         <p className="text-sm leading-relaxed">{message.content}</p>
                       </div>
                     </div>
@@ -162,15 +177,28 @@ export default function Chat() {
               );
             }
           })}
+          
+          {/* Loading Indicator */}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-[#CBC3A5] text-[#3E435D] rounded-2xl rounded-tl-sm px-5 py-4 max-w-[85%] shadow-sm opacity-70 animate-pulse">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-[#3E435D] rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-[#3E435D] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-2 h-2 bg-[#3E435D] rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
       </div>
 
       {/* Quick Question Suggestions */}
-      {messages.length <= 3 && (
+      {messages.length <= 1 && (
         <div className="px-4 py-3">
           <div className="max-w-4xl mx-auto">
-            <p className="text-[#3E435D] text-sm font-medium mb-3">Common Questions:</p>
+            <p className="text-[#3E435D] text-sm font-medium mb-3">Ask about the document:</p>
             <div className="flex flex-wrap gap-2">
               {exampleQuestions.map((question, index) => (
                 <button
@@ -194,8 +222,9 @@ export default function Chat() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask about your recovery..."
-              className="flex-1 bg-transparent text-[#3E435D] placeholder:text-[#9AA7B1] resize-none outline-none text-lg min-h-7 max-h-32"
+              placeholder="Ask about the medical record..."
+              disabled={isLoading}
+              className="flex-1 bg-transparent text-[#3E435D] placeholder:text-[#9AA7B1] resize-none outline-none text-lg min-h-7 max-h-32 disabled:opacity-50"
               rows={1}
               style={{ 
                 height: 'auto',
@@ -209,20 +238,20 @@ export default function Chat() {
             />
             <button
               onClick={handleSendMessage}
-              disabled={!inputValue.trim()}
+              disabled={!inputValue.trim() || isLoading}
               className="bg-[#3E435D] text-[#D3D0BC] p-3 rounded-xl hover:bg-[#4a5070] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
               <Send className="w-5 h-5" />
             </button>
           </div>
           
-          {/* Voice Input Button */}
           <button
             onClick={toggleRecording}
+            disabled={isLoading}
             className={`p-4 rounded-2xl transition-all shrink-0 ${
               isRecording
                 ? "bg-[#d4183d] text-white animate-pulse"
-                : "bg-[#3E435D] text-[#D3D0BC] hover:bg-[#4a5070]"
+                : "bg-[#3E435D] text-[#D3D0BC] hover:bg-[#4a5070] disabled:opacity-50"
             }`}
           >
             <Mic className="w-7 h-7" />
