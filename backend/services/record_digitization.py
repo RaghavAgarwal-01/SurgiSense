@@ -3,7 +3,7 @@
 import os
 import json
 from groq import Groq
-from backend.utils.pdf_reader import extract_text_from_pdf
+from utils.pdf_reader import extract_text_from_pdf
 import logging
 logging.basicConfig(level=logging.INFO)
 
@@ -47,7 +47,13 @@ Discharge Summary:
         response_format={"type": "json_object"}
     )
 
-    content = response.choices[0].message.content.strip()
+    content = response.choices[0].message.content
+    if content is None:
+        return {
+            "error": "Empty response from LLM",
+            "raw_output": None
+        }
+    content = content.strip()
 
     try:
         ai_json = json.loads(content)
@@ -66,10 +72,3 @@ Discharge Summary:
     }
 
     return normalized
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        return {
-            "error": "Invalid JSON from LLM",
-            "raw_output": content
-        }
