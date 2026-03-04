@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router"; // Note: In newer React Router, this is usually 'react-router-dom'
-import { Heart, Send, Mic, AlertTriangle, Shield, ChevronLeft, Volume2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Heart, Send, Mic, AlertTriangle, Shield, ChevronLeft, Sparkles } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from "react-markdown";
 
 export default function Chat() {
-  // 1. Cleaned up initial messages to just a single welcome prompt
   const [messages, setMessages] = useState([
     {
       id: "1",
@@ -14,8 +15,6 @@ export default function Chat() {
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  
-  // 2. Added a loading state so the user knows the AI is thinking
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
@@ -27,10 +26,8 @@ export default function Chat() {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  // 3. Upgraded to async function to talk to your real Python backend
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
-
     const userText = inputValue;
     const userMessage = {
       id: Date.now().toString(),
@@ -38,21 +35,16 @@ export default function Chat() {
       content: userText,
       timestamp: new Date(),
     };
-
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
     setIsLoading(true);
-
     try {
-      // 4. Send the question to your local FastAPI server!
       const response = await fetch('http://localhost:8000/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: userText }),
       });
-
       const data = await response.json();
-
       if (data.status === 'success') {
         setMessages((prev) => [...prev, {
           id: (Date.now() + 1).toString(),
@@ -66,7 +58,7 @@ export default function Chat() {
     } catch (error) {
       setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
-        type: "error", // Using your safety alert UI for errors
+        type: "error",
         content: "Network error. Please make sure your FastAPI backend is running and you have scanned a document.",
         timestamp: new Date(),
       }]);
@@ -85,7 +77,6 @@ export default function Chat() {
   const toggleRecording = () => {
     setIsRecording(!isRecording);
     if (!isRecording) {
-      // Simulate voice recording for now (you can hook this up to your voice API later!)
       setTimeout(() => {
         setIsRecording(false);
         setInputValue("Can I start putting more weight on my leg?");
@@ -101,110 +92,118 @@ export default function Chat() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#D3D0BC] flex flex-col">
+    <div className="h-screen bg-[#D3D0BC] flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-[#3E435D] px-4 py-4 sticky top-0 z-10 shadow-md">
+      <header className="bg-[#3E435D]/95 backdrop-blur-md px-5 py-3 border-b border-white/5 shrink-0">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link to="/dashboard" className="text-[#D3D0BC]">
-              <ChevronLeft className="w-7 h-7" />
+            <Link to="/dashboard" className="text-[#D3D0BC] hover:bg-white/10 p-1.5 rounded-lg transition-colors">
+              <ChevronLeft className="w-5 h-5" />
             </Link>
-            <Heart className="w-7 h-7 text-[#CBC3A5]" />
+            <div className="w-9 h-9 bg-[#CBC3A5] rounded-xl flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-[#3E435D]" />
+            </div>
             <div>
-              <h1 className="text-[#D3D0BC] text-lg font-semibold">AI Recovery Assistant</h1>
-              <p className="text-[#9AA7B1] text-sm">Always here to help</p>
+              <h1 className="text-[#D3D0BC] text-base font-semibold leading-tight">AI Recovery Assistant</h1>
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 bg-green-400 rounded-full" />
+                <p className="text-[#9AA7B1] text-xs">Online · RAG-enabled</p>
+              </div>
             </div>
           </div>
-          <button className="text-[#D3D0BC]">
-            <Volume2 className="w-6 h-6" />
-          </button>
+        </div>
+
+        {/* Safety Notice */}
+        <div className="max-w-4xl mx-auto flex items-center gap-2 mt-2 bg-white/5 rounded-lg px-3 py-1.5">
+          <Shield className="w-3.5 h-3.5 text-[#CBC3A5] shrink-0" />
+          <p className="text-[#9AA7B1] text-[11px]">
+            AI suggestions are educational only. For emergencies, call 911.
+          </p>
         </div>
       </header>
 
-      {/* Safety Notice */}
-      <div className="bg-[#3E435D] px-4 py-3 border-t border-[#D3D0BC]/20">
-        <div className="max-w-4xl mx-auto flex items-start gap-2">
-          <Shield className="w-5 h-5 text-[#CBC3A5] shrink-0 mt-0.5" />
-          <p className="text-[#9AA7B1] text-sm">
-            AI suggestions are educational only. For medical emergencies, call 911 or your healthcare provider.
-          </p>
-        </div>
-      </div>
-
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      <div className="flex-1 overflow-y-auto px-4 py-5">
         <div className="max-w-4xl mx-auto space-y-4">
-          {messages.map((message) => {
-            if (message.type === "user") {
-              return (
-                <div key={message.id} className="flex justify-end">
-                  <div className="bg-[#9AA7B1] text-white rounded-2xl rounded-tr-sm px-5 py-4 max-w-[85%] shadow-sm">
-                    <p className="text-lg leading-relaxed">{message.content}</p>
-                    <p className="text-xs text-white/70 mt-2">
-                      {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  </div>
-                </div>
-              );
-            } else if (message.type === "ai") {
-              return (
-                <div key={message.id} className="flex justify-start">
-                  <div className="bg-[#CBC3A5] text-[#3E435D] rounded-2xl rounded-tl-sm px-5 py-4 max-w-[85%] shadow-sm">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 bg-[#3E435D] rounded-full"></div>
-                      <span className="text-sm font-semibold">AI Assistant</span>
+          <AnimatePresence>
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {message.type === "user" ? (
+                  <div className="flex justify-end">
+                    <div className="bg-[#3E435D] text-[#D3D0BC] rounded-2xl rounded-br-md px-4 py-3 max-w-[80%] shadow-sm">
+                      <p className="text-sm leading-relaxed">{message.content}</p>
+                      <p className="text-[10px] text-[#D3D0BC]/50 mt-1.5 text-right">
+                        {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </p>
                     </div>
-                    <p className="text-lg leading-relaxed whitespace-pre-line">{message.content}</p>
-                    <p className="text-xs text-[#3E435D]/60 mt-2">
-                      {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </p>
                   </div>
-                </div>
-              );
-            } else {
-              return (
-                <div key={message.id} className="flex justify-center">
-                  <div className="bg-[#3E435D] border-2 border-[#3E435D] text-[#D3D0BC] rounded-2xl px-5 py-4 max-w-[90%] shadow-md">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="w-6 h-6 text-[#CBC3A5] shrink-0 mt-1" />
-                      <div>
-                        <p className="font-semibold mb-2">⚠️ Alert</p>
+                ) : message.type === "ai" ? (
+                  <div className="flex justify-start gap-2.5">
+                    <div className="w-7 h-7 bg-[#CBC3A5] rounded-lg flex items-center justify-center shrink-0 mt-1">
+                      <Sparkles className="w-3.5 h-3.5 text-[#3E435D]" />
+                    </div>
+                    <div className="bg-white/80 backdrop-blur-sm text-[#3E435D] rounded-2xl rounded-tl-md px-4 py-3 max-w-[80%] border border-[#3E435D]/5 shadow-sm">
+                      <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-headings:text-[#3E435D] prose-strong:text-[#3E435D]">
+                        <ReactMarkdown>{message.content}</ReactMarkdown>
+                      </div>
+                      <p className="text-[10px] text-[#9AA7B1] mt-1.5">
+                        {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-center">
+                    <div className="bg-[#d4183d]/10 border border-[#d4183d]/20 text-[#d4183d] rounded-xl px-4 py-3 max-w-[85%]">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                         <p className="text-sm leading-relaxed">{message.content}</p>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            }
-          })}
-          
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
           {/* Loading Indicator */}
           {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-[#CBC3A5] text-[#3E435D] rounded-2xl rounded-tl-sm px-5 py-4 max-w-[85%] shadow-sm opacity-70 animate-pulse">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-[#3E435D] rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-[#3E435D] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-2 h-2 bg-[#3E435D] rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex justify-start gap-2.5"
+            >
+              <div className="w-7 h-7 bg-[#CBC3A5] rounded-lg flex items-center justify-center shrink-0 mt-1">
+                <Sparkles className="w-3.5 h-3.5 text-[#3E435D]" />
+              </div>
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl rounded-tl-md px-5 py-4 border border-[#3E435D]/5">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-[#3E435D]/40 rounded-full animate-bounce" />
+                  <span className="w-2 h-2 bg-[#3E435D]/40 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
+                  <span className="w-2 h-2 bg-[#3E435D]/40 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
           <div ref={messagesEndRef} />
         </div>
       </div>
 
-      {/* Quick Question Suggestions */}
+      {/* Quick Questions */}
       {messages.length <= 1 && (
-        <div className="px-4 py-3">
+        <div className="px-4 pb-3 shrink-0">
           <div className="max-w-4xl mx-auto">
-            <p className="text-[#3E435D] text-sm font-medium mb-3">Ask about the document:</p>
+            <p className="text-[#3E435D]/60 text-xs font-medium mb-2">Suggested questions:</p>
             <div className="flex flex-wrap gap-2">
               {exampleQuestions.map((question, index) => (
                 <button
                   key={index}
                   onClick={() => setInputValue(question)}
-                  className="bg-white text-[#3E435D] px-4 py-2 rounded-full text-sm border border-[#3E435D]/20 hover:bg-[#3E435D] hover:text-[#D3D0BC] transition-colors"
+                  className="bg-white/70 backdrop-blur-sm text-[#3E435D] px-3 py-1.5 rounded-full text-xs font-medium border border-[#3E435D]/10 hover:bg-[#3E435D] hover:text-[#D3D0BC] transition-all duration-200"
                 >
                   {question}
                 </button>
@@ -215,53 +214,48 @@ export default function Chat() {
       )}
 
       {/* Input Area */}
-      <div className="bg-white px-4 py-4 border-t border-[#3E435D]/20 sticky bottom-0">
-        <div className="max-w-4xl mx-auto flex gap-3 items-end">
-          <div className="flex-1 bg-[#D3D0BC] rounded-2xl px-4 py-3 flex items-center gap-3">
+      <div className="bg-white/90 backdrop-blur-md px-4 py-3 border-t border-[#3E435D]/10 shrink-0">
+        <div className="max-w-4xl mx-auto flex gap-2 items-end">
+          <div className="flex-1 bg-[#D3D0BC]/30 rounded-xl px-4 py-2.5 flex items-center gap-2 border border-[#3E435D]/5 focus-within:border-[#3E435D]/20 transition-colors">
             <textarea
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyPress}
               placeholder="Ask about the medical record..."
               disabled={isLoading}
-              className="flex-1 bg-transparent text-[#3E435D] placeholder:text-[#9AA7B1] resize-none outline-none text-lg min-h-7 max-h-32 disabled:opacity-50"
+              className="flex-1 bg-transparent text-[#3E435D] placeholder:text-[#9AA7B1] resize-none outline-none text-sm min-h-6 max-h-28 disabled:opacity-50"
               rows={1}
-              style={{ 
-                height: 'auto',
-                minHeight: '28px'
-              }}
               onInput={(e) => {
-                const target = e.target;
-                target.style.height = 'auto';
-                target.style.height = target.scrollHeight + 'px';
+                e.target.style.height = 'auto';
+                e.target.style.height = e.target.scrollHeight + 'px';
               }}
             />
             <button
               onClick={handleSendMessage}
               disabled={!inputValue.trim() || isLoading}
-              className="bg-[#3E435D] text-[#D3D0BC] p-3 rounded-xl hover:bg-[#4a5070] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              className="bg-[#3E435D] text-[#D3D0BC] p-2 rounded-lg hover:bg-[#4a5070] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
             >
-              <Send className="w-5 h-5" />
+              <Send className="w-4 h-4" />
             </button>
           </div>
-          
+
           <button
             onClick={toggleRecording}
             disabled={isLoading}
-            className={`p-4 rounded-2xl transition-all shrink-0 ${
+            className={`p-3 rounded-xl transition-all shrink-0 ${
               isRecording
-                ? "bg-[#d4183d] text-white animate-pulse"
+                ? "bg-[#d4183d] text-white shadow-lg shadow-[#d4183d]/30 animate-pulse"
                 : "bg-[#3E435D] text-[#D3D0BC] hover:bg-[#4a5070] disabled:opacity-50"
             }`}
           >
-            <Mic className="w-7 h-7" />
+            <Mic className="w-5 h-5" />
           </button>
         </div>
-        
+
         {isRecording && (
-          <div className="max-w-4xl mx-auto mt-3">
-            <div className="bg-[#d4183d]/10 text-[#d4183d] px-4 py-2 rounded-xl text-center">
-              <p className="text-sm font-medium">🎤 Listening... Tap to stop</p>
+          <div className="max-w-4xl mx-auto mt-2">
+            <div className="bg-[#d4183d]/10 text-[#d4183d] px-3 py-1.5 rounded-lg text-center">
+              <p className="text-xs font-medium">Listening... Tap mic to stop</p>
             </div>
           </div>
         )}

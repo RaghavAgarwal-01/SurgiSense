@@ -9,7 +9,7 @@ load_dotenv()
 
 class WoundAnalysisService:
     def __init__(self):
-        self.client = Groq(api_key=os.getenv("GROQ_KEY"))
+        self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
     def analyze(self, image_bytes: bytes) -> str:
         try:

@@ -9,7 +9,7 @@ import { cn } from "./utils";
 function RadioGroup({
   className,
   ...props
-}: React.ComponentProps<typeof RadioGroupPrimitive.Root>) {
+}) {
   return (
     <RadioGroupPrimitive.Root
       data-slot="radio-group"
@@ -22,7 +22,7 @@ function RadioGroup({
 function RadioGroupItem({
   className,
   ...props
-}: React.ComponentProps<typeof RadioGroupPrimitive.Item>) {
+}) {
   return (
     <RadioGroupPrimitive.Item
       data-slot="radio-group-item"

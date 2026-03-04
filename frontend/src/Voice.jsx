@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import { Mic, Square, Loader2, MessageSquare, AlertCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = "http://localhost:8000";
 
@@ -17,7 +18,6 @@ const Voice = () => {
         try {
             setError("");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
             mediaRecorder.current = new MediaRecorder(stream);
             audioChunks.current = [];
 
@@ -56,82 +56,102 @@ const Voice = () => {
                 formData,
                 { headers: { "Content-Type": "multipart/form-data" } }
             );
-
-            if (!response.data?.transcript) {
-                throw new Error("Invalid transcription response");
-            }
-
+            if (!response.data?.transcript) throw new Error("Invalid transcription response");
             setTranscript(response.data.transcript);
         } catch (err) {
             console.error(err);
-            setError(
-                err.response?.data?.detail ||
-                "Speech service unreachable."
-            );
+            setError(err.response?.data?.detail || "Speech service unreachable.");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="w-full bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="text-lg font-bold text-blue-900 mb-2 flex items-center justify-center gap-2">
-                <Mic className="text-blue-600" size={20} /> Voice Intake
-            </h3>
-            <p className="text-xs text-center text-slate-500 mb-6">Speaks Hindi, English & Hinglish</p>
+        <div className="w-full bg-white/80 backdrop-blur-sm p-5 rounded-2xl border border-[#3E435D]/5 h-full flex flex-col">
+            <div className="flex items-center gap-2.5 mb-4">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${recording ? 'bg-[#d4183d]' : 'bg-[#3E435D]'}`}>
+                    <Mic className={recording ? 'text-white' : 'text-[#CBC3A5]'} size={16} />
+                </div>
+                <div>
+                    <h3 className="text-sm font-bold text-[#3E435D] leading-tight">Voice Intake</h3>
+                    <p className="text-[11px] text-[#9AA7B1]">Hindi, English & Hinglish</p>
+                </div>
+            </div>
             
-            <div className="border-2 border-dashed border-blue-100 rounded-xl p-4 mb-6 bg-slate-50 flex flex-col items-center justify-center min-h-[160px] transition-all">
+            <div className={`border-2 border-dashed rounded-xl p-4 mb-4 flex flex-col items-center justify-center min-h-32 transition-all duration-300 ${
+                recording ? 'border-[#d4183d]/30 bg-[#d4183d]/5' : 'border-[#CBC3A5]/40 bg-[#D3D0BC]/10 hover:border-[#CBC3A5]'
+            }`}>
                 {recording ? (
-                    <div className="flex flex-col items-center animate-pulse gap-3">
-                        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                            <div className="w-4 h-4 bg-red-500 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.6)]"></div>
+                    <div className="flex flex-col items-center gap-2.5">
+                        <div className="relative">
+                            <div className="w-10 h-10 bg-[#d4183d]/10 rounded-full flex items-center justify-center">
+                                <div className="w-3.5 h-3.5 bg-[#d4183d] rounded-full animate-pulse" />
+                            </div>
+                            <div className="absolute inset-0 w-10 h-10 bg-[#d4183d]/5 rounded-full animate-ping" />
                         </div>
-                        <span className="text-xs font-bold text-red-500 uppercase tracking-widest">Recording...</span>
+                        <span className="text-[10px] font-bold text-[#d4183d] uppercase tracking-widest">Recording...</span>
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center text-slate-400 gap-2">
-                        <Mic size={28} />
-                        <span className="text-sm">Tap start to describe symptoms</span>
+                    <div className="flex flex-col items-center text-[#9AA7B1] gap-1.5">
+                        <Mic size={24} className="opacity-60" />
+                        <span className="text-xs">Tap start to describe symptoms</span>
                     </div>
                 )}
             </div>
 
-            {error && (
-                <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg flex items-center gap-2">
-                    <AlertCircle size={14} /> {error}
-                </div>
-            )}
+            <AnimatePresence>
+                {error && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="mb-3 p-2.5 bg-[#d4183d]/10 text-[#d4183d] text-xs rounded-xl flex items-center gap-2"
+                    >
+                        <AlertCircle size={13} /> {error}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <button 
                 onClick={recording ? stopRecording : startRecording}
-                className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 text-white active:scale-[0.98] ${
-                    recording ? 'bg-red-500 hover:bg-red-600 shadow-md shadow-red-200' : 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200'
+                className={`w-full py-2.5 rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-2 active:scale-[0.98] ${
+                    recording 
+                        ? 'bg-[#d4183d] text-white hover:bg-[#b01530] shadow-md shadow-[#d4183d]/15' 
+                        : 'bg-[#3E435D] text-[#D3D0BC] hover:bg-[#4a5070] shadow-md shadow-[#3E435D]/15'
                 }`}
             >
                 {recording ? (
-                    <> <Square size={16} fill="currentColor" /> Stop & Process </>
+                    <> <Square size={14} fill="currentColor" /> Stop & Process </>
                 ) : (
-                    <> <Mic size={16} /> Start Recording </>
+                    <> <Mic size={14} /> Start Recording </>
                 )}
             </button>
 
-            {(transcript || loading) && (
-                <div className="mt-6 text-left bg-blue-50/50 p-4 rounded-xl border border-blue-100 min-h-[80px] animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div className="flex items-center gap-2 mb-2">
-                        <MessageSquare className="text-blue-600" size={14} />
-                        <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">AI Transcript</span>
-                    </div>
-                    <p className="text-sm text-slate-700 leading-relaxed italic">
-                        {loading ? (
-                            <span className="flex items-center gap-2 text-blue-500 font-medium">
-                                <Loader2 className="animate-spin" size={14} /> Transcribing audio...
-                            </span>
-                        ) : (
-                            `"${transcript}"`
-                        )}
-                    </p>
-                </div>
-            )}
+            <AnimatePresence>
+                {(transcript || loading) && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        transition={{ duration: 0.25 }}
+                        className="mt-4 text-left bg-[#D3D0BC]/10 p-3.5 rounded-xl border border-[#3E435D]/5 min-h-16 flex-1"
+                    >
+                        <div className="flex items-center gap-2 mb-2">
+                            <MessageSquare className="text-[#3E435D]" size={12} />
+                            <span className="text-[10px] font-bold text-[#9AA7B1] uppercase tracking-wider">AI Transcript</span>
+                        </div>
+                        <p className="text-xs text-[#3E435D] leading-relaxed italic">
+                            {loading ? (
+                                <span className="flex items-center gap-2 text-[#9AA7B1] font-medium not-italic">
+                                    <Loader2 className="animate-spin" size={12} /> Transcribing audio...
+                                </span>
+                            ) : (
+                                `"${transcript}"`
+                            )}
+                        </p>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
