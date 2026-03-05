@@ -3,6 +3,7 @@ import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import Chat from "./pages/Chat";
 import Pharmacy from "./pages/Pharmacy";
+import SurgeryReadiness from "./pages/SurgeryReadiness";
 import RecordDigitization from "./components/ui/RecordDigitization";
 export const router = createBrowserRouter([
   {
@@ -24,5 +25,9 @@ export const router = createBrowserRouter([
   {
     path: "/pharmacy",
     Component: Pharmacy,
+  },
+  {
+    path: "/surgery-readiness",
+    Component: SurgeryReadiness,
   },
 ]);

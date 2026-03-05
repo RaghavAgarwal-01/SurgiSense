@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = "http://localhost:8000";
 
-const Vision = () => {
+const Vision = ({ onAnalysisComplete }) => {
     const [preview, setPreview] = useState(null);
     const [file, setFile] = useState(null);
     const [analysis, setAnalysis] = useState("");
@@ -38,6 +38,7 @@ const Vision = () => {
             );
             if (!response.data?.analysis) throw new Error("Invalid response from server");
             setAnalysis(response.data.analysis);
+            onAnalysisComplete?.(response.data.analysis, preview);
         } catch (err) {
             console.error(err);
             setError(err.response?.data?.detail || "Failed to analyze the image. Backend not reachable.");
@@ -106,7 +107,7 @@ const Vision = () => {
             <button 
                 onClick={handleAnalyze}
                 disabled={!file || loading}
-                className={`w-full py-2.5 mb-4 rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-2 shrink-0 active:scale-[0.98] ${
+                className={`w-full py-2.5 rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-2 shrink-0 active:scale-[0.98] ${
                     !file ? 'bg-[#9AA7B1]/20 text-[#9AA7B1] cursor-not-allowed' : 
                     loading ? 'bg-[#3E435D]/70 text-[#D3D0BC] cursor-wait' : 
                     'bg-[#3E435D] text-[#D3D0BC] hover:bg-[#4a5070] shadow-md shadow-[#3E435D]/15'
@@ -119,44 +120,7 @@ const Vision = () => {
                 )}
             </button>
 
-            <AnimatePresence>
-                {analysis && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 12 }}
-                        transition={{ duration: 0.3 }}
-                        className="flex-1 flex flex-col gap-3"
-                    >
-                        {severity && (
-                            <div className={`p-3.5 rounded-xl border border-[#3E435D]/5 ${severity.bgColor}`}>
-                                <div className="flex justify-between items-center mb-2">
-                                    <div className={`flex items-center gap-2 font-bold text-sm ${severity.textColor}`}>
-                                        <severity.icon size={16} />
-                                        <span>{severity.label}</span>
-                                    </div>
-                                    <span className={`font-extrabold text-base ${severity.textColor}`}>{severity.score}/10</span>
-                                </div>
-                                <div className="w-full bg-[#D3D0BC]/50 rounded-full h-2 overflow-hidden">
-                                    <motion.div 
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${(severity.score / 10) * 100}%` }}
-                                        transition={{ duration: 1, ease: "easeOut" }}
-                                        className={`h-2 rounded-full ${severity.barColor}`}
-                                    />
-                                </div>
-                            </div>
-                        )}
 
-                        <div className="bg-[#D3D0BC]/10 p-3.5 rounded-xl border border-[#3E435D]/5 flex-1">
-                            <h4 className="text-[10px] font-bold text-[#9AA7B1] uppercase tracking-wider mb-2">AI Assessment</h4>
-                            <div className="text-xs text-[#3E435D] leading-relaxed overflow-y-auto max-h-48 pr-1.5 prose prose-sm prose-headings:text-[#3E435D]">
-                                <ReactMarkdown>{analysis}</ReactMarkdown>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
         </div>
     );
 };

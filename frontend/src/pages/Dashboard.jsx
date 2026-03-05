@@ -17,10 +17,11 @@ import {
   Home,
   Upload,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { Progress } from "../components/ui/Progress";
+import ReactMarkdown from 'react-markdown';
 import Vision from "../Vision";
-import Voice from "../Voice";
 import axios from "axios";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -39,6 +40,28 @@ export default function Dashboard() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const lastScrollYRef = useRef(0);
   const headerRef = useRef(null);
+
+  const [woundAnalysis, setWoundAnalysis] = useState(null);
+  const [woundPreview, setWoundPreview] = useState(null);
+
+  const handleWoundAnalysis = (analysis, preview) => {
+    setWoundAnalysis(analysis);
+    setWoundPreview(preview);
+  };
+
+  const getWoundSeverity = (text) => {
+    if (!text) return null;
+    const match =
+      text.match(/(\d+)\s*(?:\/|out of)\s*10|\\boxed\{(\d+)\}/i) ||
+      text.match(/(?:severity|score)[\s:]*(\d+)/i);
+    const score = match ? parseInt(match[1] || match[2], 10) : null;
+    if (!score || score < 1 || score > 10) return null;
+    if (score <= 3) return { score, barColor: 'bg-[#9AA7B1]', bgColor: 'bg-[#D3D0BC]/30', textColor: 'text-[#3E435D]', label: 'Low Risk' };
+    if (score <= 6) return { score, barColor: 'bg-[#CBC3A5]', bgColor: 'bg-[#CBC3A5]/20', textColor: 'text-[#3E435D]', label: 'Monitor Closely' };
+    return { score, barColor: 'bg-[#d4183d]', bgColor: 'bg-[#d4183d]/10', textColor: 'text-[#d4183d]', label: 'Critical Alert' };
+  };
+
+  const woundSeverity = getWoundSeverity(woundAnalysis);
 
   const [tasks, setTasks] = useState([
     { id: 'placeholder', title: "Upload Discharge Summary to generate today's schedule.", time: "--", status: "pending", type: "info" }
@@ -126,7 +149,7 @@ export default function Dashboard() {
   const totalTasks = tasks.filter(t => t.id !== 'placeholder').length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#D3D0BC] to-[#D3D0BC]/90">
+    <div className="min-h-screen bg-linear-to-b from-[#D3D0BC] to-[#D3D0BC]/90">
       {/* NAVBAR */}
       <header
         ref={headerRef}
@@ -151,6 +174,7 @@ export default function Dashboard() {
               <div className="hidden md:flex items-center gap-1">
                 <Link to="/dashboard" className="px-3 py-1.5 rounded-lg text-[#CBC3A5] text-sm font-medium bg-[#CBC3A5]/10">Home</Link>
                 <Link to="/chat" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Chat</Link>
+                <Link to="/surgery-readiness" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Readiness</Link>
                 <Link to="/pharmacy" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Pharmacy</Link>
               </div>
               <button
@@ -184,6 +208,7 @@ export default function Dashboard() {
               {[
                 { to: "/dashboard", icon: Home, label: "Dashboard" },
                 { to: "/chat", icon: MessageCircle, label: "AI Chat" },
+                { to: "/surgery-readiness", icon: ShieldCheck, label: "Readiness" },
                 { to: "/pharmacy", icon: Pill, label: "Pharmacy" },
               ].map(item => (
                 <Link key={item.to} to={item.to} onClick={() => setIsMenuOpen(false)}
@@ -309,13 +334,59 @@ export default function Dashboard() {
           )}
         </section>
 
-        {/* Wound Check & Voice - Side by side on desktop */}
+        {/* Wound Check & Results - Side by side on desktop */}
         <div className="grid lg:grid-cols-2 gap-5">
           <section id="wound" className="scroll-mt-28">
-            <Vision />
+            <Vision onAnalysisComplete={handleWoundAnalysis} />
           </section>
           <section>
-            <Voice />
+            <div className="w-full bg-white/80 backdrop-blur-sm p-5 rounded-2xl border border-[#3E435D]/5 h-full flex flex-col">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-8 h-8 bg-[#3E435D] rounded-xl flex items-center justify-center">
+                  <Activity className="text-[#CBC3A5]" size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#3E435D] leading-tight">Wound Analysis Results</h3>
+                  <p className="text-[11px] text-[#9AA7B1]">AI-powered clinical assessment</p>
+                </div>
+              </div>
+
+              {!woundAnalysis ? (
+                <div className="border-2 border-dashed border-[#CBC3A5]/40 rounded-xl p-4 flex-1 flex flex-col items-center justify-center min-h-32 bg-[#D3D0BC]/10">
+                  <Camera size={24} className="text-[#9AA7B1] opacity-60 mb-1.5" />
+                  <span className="text-xs text-[#9AA7B1]">Upload and analyze a wound photo to see results</span>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col gap-3">
+                  {woundSeverity && (
+                    <div className={`p-3.5 rounded-xl border border-[#3E435D]/5 ${woundSeverity.bgColor}`}>
+                      <div className="flex justify-between items-center mb-2">
+                        <div className={`flex items-center gap-2 font-bold text-sm ${woundSeverity.textColor}`}>
+                          {woundSeverity.score <= 3 ? <CheckCircle size={16} /> : woundSeverity.score <= 6 ? <Activity size={16} /> : <AlertCircle size={16} />}
+                          <span>{woundSeverity.label}</span>
+                        </div>
+                        <span className={`font-extrabold text-base ${woundSeverity.textColor}`}>{woundSeverity.score}/10</span>
+                      </div>
+                      <div className="w-full bg-[#D3D0BC]/50 rounded-full h-2 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(woundSeverity.score / 10) * 100}%` }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                          className={`h-2 rounded-full ${woundSeverity.barColor}`}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-[#D3D0BC]/10 p-3.5 rounded-xl border border-[#3E435D]/5 flex-1">
+                    <h4 className="text-[10px] font-bold text-[#9AA7B1] uppercase tracking-wider mb-2">AI Assessment</h4>
+                    <div className="text-xs text-[#3E435D] leading-relaxed overflow-y-auto max-h-48 pr-1.5 prose prose-sm prose-headings:text-[#3E435D]">
+                      <ReactMarkdown>{woundAnalysis}</ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </section>
         </div>
 
@@ -375,7 +446,7 @@ export default function Dashboard() {
           {[
             { to: "/dashboard", icon: Home, label: "Home", active: true },
             { to: "/chat", icon: MessageCircle, label: "Chat", active: false },
-            { href: "#wound", icon: Activity, label: "Health", active: false },
+            { to: "/surgery-readiness", icon: ShieldCheck, label: "Readiness", active: false },
             { to: "/pharmacy", icon: Pill, label: "Meds", active: false },
           ].map((item) => {
             const Wrapper = item.to ? Link : 'a';

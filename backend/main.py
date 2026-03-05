@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import fitz  
 from groq import Groq
 
+from services.rules import evaluate_patient
 from services.record_digitization import digitize_discharge_summary
 from services.speech_to_text import SpeechToTextService
 from services.wound_analysis import WoundAnalysisService
@@ -183,3 +184,24 @@ async def chat_with_document(request: ChatRequest):
     except Exception as e:
         logger.error(f"Chat Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate an answer.")
+
+class PatientVitals(BaseModel):
+    surgery: str
+    bp_sys: int
+    bp_dia: int
+    heart_rate: int
+    spo2: int
+    temperature: float
+    hemoglobin: float
+    blood_sugar: int
+
+
+@app.post("/api/evaluate")
+def evaluate(vitals: PatientVitals):
+    result = evaluate_patient(vitals)
+    return result
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

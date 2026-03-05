@@ -82,7 +82,7 @@ export default function Landing() {
 
               <motion.h1 variants={fadeUp} custom={1} className="text-[#3E435D] text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] tracking-tight mb-6">
                 Your Intelligent
-                <span className="block bg-gradient-to-r from-[#3E435D] to-[#9AA7B1] bg-clip-text text-transparent">
+                <span className="block bg-linear-to-r from-[#3E435D] to-[#9AA7B1] bg-clip-text text-transparent">
                   Recovery Companion
                 </span>
               </motion.h1>
@@ -118,9 +118,9 @@ export default function Landing() {
                 <ImageWithFallback
                   src="https://plus.unsplash.com/premium_photo-1661767897334-bbfbdfdc4d1a?q=80&w=1170&auto=format&fit=crop"
                   alt="Healthcare professional helping patient"
-                  className="w-full h-auto object-cover aspect-[4/3]"
+                  className="w-full h-auto object-cover aspect-4/3"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#3E435D]/40 via-transparent to-transparent" />
+                <div className="absolute inset-0 bg-linear-to-t from-[#3E435D]/40 via-transparent to-transparent" />
               </div>
 
               <motion.div
@@ -262,7 +262,7 @@ export default function Landing() {
                 <ImageWithFallback
                   src="https://images.unsplash.com/photo-1686052401814-d0430982f8f4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1080"
                   alt="Medical professional caring for patient"
-                  className="w-full h-auto object-cover aspect-[4/3]"
+                  className="w-full h-auto object-cover aspect-4/3"
                 />
               </div>
             </motion.div>
@@ -273,7 +273,7 @@ export default function Landing() {
       {/* CTA Section */}
       <section className="py-24 px-6 relative">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#CBC3A5]/20 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-150 h-150 bg-[#CBC3A5]/20 rounded-full blur-3xl" />
         </div>
         <motion.div
           initial="hidden"
