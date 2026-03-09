@@ -1,11 +1,32 @@
 import { createBrowserRouter } from "react-router";
+
 import Landing from "./pages/Landing";
-import Dashboard from "./pages/Dashboard";
 import Chat from "./pages/Chat";
 import Pharmacy from "./pages/Pharmacy";
 import SurgeryReadiness from "./pages/SurgeryReadiness";
 import RecordDigitization from "./components/ui/RecordDigitization";
+import Login from "./pages/Login"
+import Signup from "./pages/Signup"
+import Dashboard from "./pages/Dashboard"
+import ProfileSetup from "./pages/ProfileSetup"
 export const router = createBrowserRouter([
+  {
+ path: "/login",
+ Component: Login,
+},
+{
+path:"/setup-profile",
+Component: ProfileSetup,
+},
+{
+ path: "/signup",
+ Component: Signup,
+},
+
+{
+ path: "/dashboard",
+ Component: Dashboard,
+},
   {
     path: "/",
     Component: Landing,

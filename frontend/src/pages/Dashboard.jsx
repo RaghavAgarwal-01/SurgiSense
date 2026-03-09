@@ -27,20 +27,36 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const API_BASE = "http://localhost:8000";
-
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  };
+};
 const fadeIn = {
   hidden: { opacity: 0, y: 16 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
 };
 
 export default function Dashboard() {
+  const navigate = useNavigate()
+
+useEffect(() => {
+  const token = localStorage.getItem("token")
+
+  if (!token) {
+    navigate("/login")
+  }
+}, [])
   const [digitizedData, setDigitizedData] = useState(null);
   const [loadingRecord, setLoadingRecord] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const lastScrollYRef = useRef(0);
   const headerRef = useRef(null);
-
+  const [profile,setProfile] = useState(null);
   const [woundAnalysis, setWoundAnalysis] = useState(null);
   const [woundPreview, setWoundPreview] = useState(null);
 
@@ -66,45 +82,154 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState([
     { id: 'placeholder', title: "Upload Discharge Summary to generate today's schedule.", time: "--", status: "pending", type: "info" }
   ]);
+const fetchUserRecords = async () => {
+  try {
 
-  useEffect(() => {
-    let ticking = false;
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const currentScrollY = window.scrollY;
-          if (currentScrollY < lastScrollYRef.current || currentScrollY < 10) {
-            setIsNavVisible(true);
-          } else if (currentScrollY > lastScrollYRef.current && currentScrollY > 80) {
-            setIsNavVisible(false);
-            setIsMenuOpen(false);
-          }
-          lastScrollYRef.current = currentScrollY;
-          ticking = false;
-        });
-        ticking = true;
+    const res = await axios.get(
+      `${API_BASE}/api/my-records`,
+      getAuthHeaders()
+    );
+
+    if (res.data.length > 0) {
+      const latest = res.data[res.data.length - 1];
+      const parsed = JSON.parse(latest.content);
+
+      setDigitizedData(parsed);
+    }
+
+  } catch (err) {
+    console.error("Failed to load records", err);
+  }
+};
+const fetchTasks = async () => {
+
+  try {
+
+    const res = await axios.get(
+      `${API_BASE}/api/my-tasks`,
+      getAuthHeaders()
+    );
+
+    setTasks(res.data);
+
+  } catch (err) {
+
+    console.error("Failed to load tasks", err);
+
+  }
+
+};
+const fetchProfile = async () => {
+
+  try {
+
+    const token = localStorage.getItem("token");
+
+    const res = await axios.get(
+      `${API_BASE}/api/profile`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
       }
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+    );
 
-  const recoveryData = {
-    patientName: digitizedData?.patient_name || "Margaret Johnson",
-    surgeryType: digitizedData?.surgery_type || digitizedData?.procedure || "Hip Replacement",
-    recoveryDay: 8,
-    totalDays: 90,
-    progress: 9,
+    setProfile(res.data);
+
+  } catch (err) {
+
+    console.error("Failed to load profile", err);
+
+  }
+
+};
+ useEffect(() => {
+
+  fetchUserRecords();
+  fetchProfile();
+  fetchTasks();
+
+  let ticking = false;
+
+  const handleScroll = () => {
+    if (!ticking) {
+      window.requestAnimationFrame(() => {
+        const currentScrollY = window.scrollY;
+
+        if (currentScrollY < lastScrollYRef.current || currentScrollY < 10) {
+          setIsNavVisible(true);
+        } else if (currentScrollY > lastScrollYRef.current && currentScrollY > 80) {
+          setIsNavVisible(false);
+          setIsMenuOpen(false);
+        }
+
+        lastScrollYRef.current = currentScrollY;
+        ticking = false;
+      });
+
+      ticking = true;
+    }
   };
 
-  const toggleTaskStatus = (taskId) => {
-    if (taskId === 'placeholder') return;
+  window.addEventListener("scroll", handleScroll, { passive: true });
+
+  return () => window.removeEventListener("scroll", handleScroll);
+
+}, []);
+const calculateRecoveryDay = (date) => {
+
+  if (!date) return 0;
+
+  const surgeryDate = new Date(date);
+  const today = new Date();
+
+  const diff = today - surgeryDate;
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+  return Math.max(days, 0); // prevents negative days
+};
+
+const calculateRecoveryProgress = (date, totalDays = 90) => {
+
+  const day = calculateRecoveryDay(date);
+
+  return Math.min(Math.round((day / totalDays) * 100), 100);
+};
+const recoveryData = {
+  patientName: profile?.patient_name || "",
+  surgeryType: profile?.surgery_type || "",
+  recoveryDay: calculateRecoveryDay(profile?.surgery_date),
+  totalDays: profile?.recovery_days_total || 90,
+  progress: calculateRecoveryProgress(
+  profile?.surgery_date,
+  profile?.recovery_days_total || 90
+)
+};
+
+const toggleTaskStatus = async (taskId) => {
+
+  try {
+
+    await axios.patch(
+      `${API_BASE}/api/task/${taskId}`,
+      {},
+      getAuthHeaders()
+    );
+
     setTasks(tasks.map(task =>
       task.id === taskId
-        ? { ...task, status: task.status === 'pending' ? 'completed' : 'pending' }
+        ? { ...task, status: "completed" }
         : task
     ));
-  };
+
+  } catch (err) {
+
+    console.error("Failed to update task");
+
+  }
+
+};
 
   const handleDischargeUpload = async (file) => {
     if (!file) return;
@@ -112,7 +237,11 @@ export default function Dashboard() {
     formData.append("file", file);
     try {
       setLoadingRecord(true);
-      const res = await axios.post(`${API_BASE}/api/digitize-record`, formData);
+      const res = await axios.post(
+      `${API_BASE}/api/digitize-record`,
+      formData,
+      getAuthHeaders()
+      );
       const extractedData = res.data.data;
       setDigitizedData(extractedData);
       const medsArray = extractedData?.medication_list || extractedData?.medications || [];
@@ -120,7 +249,8 @@ export default function Dashboard() {
       try {
         const tasksRes = await axios.post(`${API_BASE}/api/generate-tasks`, {
           document_text: JSON.stringify(extractedData)
-        });
+        }
+        , getAuthHeaders());
         if (tasksRes.data.status === 'success' && tasksRes.data.tasks.length > 0) {
           setTasks(tasksRes.data.tasks);
         }
@@ -145,9 +275,22 @@ export default function Dashboard() {
 
   const activeMedications = digitizedData?.medication_list || digitizedData?.medications || [];
 
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
-  const totalTasks = tasks.filter(t => t.id !== 'placeholder').length;
+const completedTasks = tasks.filter(t => t.status === 'completed').length;
+const totalTasks = tasks.filter(t => t.id !== 'placeholder').length;
 
+// Redirect if profile missing
+useEffect(() => {
+
+  if (profile && profile.profile_exists === false) {
+    navigate("/setup-profile")
+  }
+
+}, [profile])
+
+// Loading state
+if (!profile) {
+  return <div>Loading patient data...</div>
+}
   return (
     <div className="min-h-screen bg-linear-to-b from-[#D3D0BC] to-[#D3D0BC]/90">
       {/* NAVBAR */}
@@ -249,56 +392,74 @@ export default function Dashboard() {
         </motion.div>
 
         {/* Recovery Timeline */}
-        <motion.section
-          id="timeline"
-          className="scroll-mt-28"
-          initial="hidden"
-          animate="visible"
-          variants={fadeIn}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[#3E435D] text-xl font-bold tracking-tight">Today's Recovery Tasks</h2>
-            {totalTasks > 0 && (
-              <span className="text-[#9AA7B1] text-sm font-medium">{completedTasks}/{totalTasks} done</span>
+<motion.section
+  id="timeline"
+  className="scroll-mt-28"
+  initial="hidden"
+  animate="visible"
+  variants={fadeIn}
+>
+  <div className="flex items-center justify-between mb-4">
+    <h2 className="text-[#3E435D] text-xl font-bold tracking-tight">
+      Today's Recovery Tasks
+    </h2>
+
+    {totalTasks > 0 && (
+      <span className="text-[#9AA7B1] text-sm font-medium">
+        {completedTasks}/{totalTasks} done
+      </span>
+    )}
+  </div>
+
+  <div className="space-y-2.5">
+    {tasks.map((task) => (
+      <div
+        key={task.id}
+        onClick={() => toggleTaskStatus(task.id)}
+        className={`group bg-white/80 backdrop-blur-sm rounded-xl p-4 border-l-[3px] cursor-pointer transition-all duration-200 hover:bg-white hover:shadow-md ${
+          task.status === "completed"
+            ? "border-[#9AA7B1] opacity-70"
+            : "border-[#CBC3A5]"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {task.status === "completed" ? (
+              <CheckCircle className="w-5 h-5 text-[#9AA7B1]" />
+            ) : (
+              <Clock className="w-5 h-5 text-[#CBC3A5]" />
             )}
-          </div>
-          <div className="space-y-2.5">
-            {tasks.map((task) => (
-              <div
-                key={task.id}
-                onClick={() => toggleTaskStatus(task.id)}
-                className={`group bg-white/80 backdrop-blur-sm rounded-xl p-4 border-l-[3px] cursor-pointer transition-all duration-200 hover:bg-white hover:shadow-md ${
-                  task.status === "completed" ? "border-[#9AA7B1] opacity-70" :
-                  task.status === "alert" ? "border-[#d4183d]" : "border-[#CBC3A5]"
+
+            <div>
+              <h3
+                className={`font-medium text-sm ${
+                  task.status === "completed"
+                    ? "text-[#9AA7B1] line-through"
+                    : "text-[#3E435D]"
                 }`}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {task.status === "completed" ? (
-                      <CheckCircle className="w-5 h-5 text-[#9AA7B1] shrink-0" />
-                    ) : task.status === "alert" ? (
-                      <AlertCircle className="w-5 h-5 text-[#d4183d] shrink-0" />
-                    ) : (
-                      <Clock className="w-5 h-5 text-[#CBC3A5] shrink-0" />
-                    )}
-                    <div className="min-w-0">
-                      <h3 className={`font-medium text-sm truncate ${task.status === 'completed' ? 'text-[#9AA7B1] line-through' : 'text-[#3E435D]'}`}>
-                        {task.title}
-                      </h3>
-                      <p className="text-[#9AA7B1] text-xs mt-0.5">{task.time}</p>
-                    </div>
-                  </div>
-                  <span className={`px-3 py-1 rounded-lg text-xs font-medium shrink-0 ${
-                    task.status === "completed" ? "bg-[#9AA7B1]/15 text-[#9AA7B1]" :
-                    task.status === "alert" ? "bg-[#d4183d]/10 text-[#d4183d]" : "bg-[#CBC3A5]/20 text-[#3E435D]"
-                  }`}>
-                    {task.status === "completed" ? "Done" : task.status === "alert" ? "Review" : "Pending"}
-                  </span>
-                </div>
-              </div>
-            ))}
+                {task.title}
+              </h3>
+
+              <p className="text-[#9AA7B1] text-xs">{task.time}</p>
+            </div>
           </div>
-        </motion.section>
+
+          <span
+            className={`px-3 py-1 rounded-lg text-xs font-medium ${
+              task.status === "completed"
+                ? "bg-[#9AA7B1]/15 text-[#9AA7B1]"
+                : "bg-[#CBC3A5]/20 text-[#3E435D]"
+            }`}
+          >
+            {task.status === "completed" ? "Done" : "Pending"}
+          </span>
+        </div>
+      </div>
+    ))}
+  </div>
+</motion.section>
+         
 
         {/* Discharge Summary Card */}
         <section className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-[#3E435D]/5">

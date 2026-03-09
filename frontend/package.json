@@ -11,7 +11,7 @@
     "@vitejs/plugin-react": "^5.1.4",
     "axios": "^1.13.5",
     "clsx": "^2.1.1",
-    "framer-motion": "^12.35.0",
+    "framer-motion": "^12.35.1",
     "lucide-react": "^0.564.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

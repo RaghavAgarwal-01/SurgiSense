@@ -59,7 +59,7 @@ export default function Landing() {
             <span className="text-[#D3D0BC] text-xl font-bold tracking-tight">SurgiSense</span>
           </Link>
           <Link
-            to="/dashboard"
+            to="/login"
             className="bg-[#CBC3A5] text-[#3E435D] px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-[#D3D0BC] transition-all hover:shadow-lg hover:shadow-[#CBC3A5]/20"
           >
             Get Started
@@ -93,8 +93,8 @@ export default function Landing() {
 
               <motion.div variants={fadeUp} custom={3} className="flex flex-col sm:flex-row gap-3">
                 <Link
-                  to="/dashboard"
-                  className="group bg-[#3E435D] text-[#D3D0BC] px-7 py-3.5 rounded-xl font-semibold text-base hover:bg-[#4a5070] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#3E435D]/25 hover:shadow-xl hover:shadow-[#3E435D]/30"
+                  to="/login"
+                 className="group bg-[#3E435D] text-[#D3D0BC] px-7 py-3.5 rounded-xl font-semibold text-base"
                 >
                   Start Recovery
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
@@ -290,10 +290,10 @@ export default function Landing() {
           </motion.p>
           <motion.div variants={fadeUp} custom={2}>
             <Link
-              to="/dashboard"
-              className="group inline-flex items-center gap-2 bg-[#3E435D] text-[#D3D0BC] px-8 py-4 rounded-xl font-semibold text-lg hover:bg-[#4a5070] transition-all shadow-lg shadow-[#3E435D]/25 hover:shadow-xl"
+              to="/login"
+              className="group inline-flex items-center gap-2 bg-[#3E435D] text-[#D3D0BC]"
             >
-              Start Free Trial
+             Start Free Trial
               <ArrowRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </motion.div>
