@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel
-
+from google_auth import router as google_router
 from fastapi import FastAPI, UploadFile, File, HTTPException ,Depends
 from fastapi.middleware.cors import CORSMiddleware
 import fitz  
@@ -19,7 +19,7 @@ from services.wound_analysis import WoundAnalysisService
 from services.chat import MedicalRAGService
 from auth_routes import router as auth_router
 from database import Base, engine
-
+from starlette.middleware.sessions import SessionMiddleware
 Base.metadata.create_all(bind=engine)
 
 
@@ -36,6 +36,18 @@ rag = MedicalRAGService()
 
 app = FastAPI(title="SurgiSense AI Backend")
 app.include_router(auth_router, prefix="/auth")
+app.include_router(google_router, prefix="/auth")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+from starlette.middleware.sessions import SessionMiddleware
 
 app.add_middleware(
     CORSMiddleware,
@@ -48,6 +60,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(
+    SessionMiddleware,
+    secret_key="supersecretkey"
+)
 GROQ_KEY = os.getenv('GROQ_API_KEY')
 if not GROQ_KEY:
     logger.error("GROQ_KEY missing!")
@@ -378,17 +394,17 @@ def get_my_tasks(
 
     tasks = db.query(RecoveryTask).filter(
         RecoveryTask.user_id == user.id
-    ).all()
+    ).order_by(RecoveryTask.id).all()
 
     return [
-    {
-        "id": t.id,
-        "title": t.title,
-        "time": t.time,
-        "status": t.status
-    }
-    for t in tasks
-]
+        {
+            "id": t.id,
+            "title": t.title,
+            "time": t.time,
+            "status": t.status
+        }
+        for t in tasks
+    ]
 @app.patch("/api/task/{task_id}")
 def update_task(
     task_id: int,

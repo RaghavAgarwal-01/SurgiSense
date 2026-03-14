@@ -9,10 +9,15 @@ import Login from "./pages/Login"
 import Signup from "./pages/Signup"
 import Dashboard from "./pages/Dashboard"
 import ProfileSetup from "./pages/ProfileSetup"
+import OAuthSuccess from "./pages/OauthSuccess"
 export const router = createBrowserRouter([
   {
  path: "/login",
  Component: Login,
+},
+{
+  path: "/oauth-success",
+  Component: OAuthSuccess,
 },
 {
 path:"/setup-profile",

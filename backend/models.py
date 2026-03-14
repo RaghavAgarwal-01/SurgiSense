@@ -2,14 +2,22 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from database import Base
 
+
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
-    email = Column(String, unique=True)
-    password = Column(String)
+
+    email = Column(String, unique=True, index=True)
+
+    # password for normal signup
+    password = Column(String, nullable=True)
+
+    # google login
+    google_id = Column(String, nullable=True)
 
     records = relationship("MedicalRecord", back_populates="owner")
+    profile = relationship("PatientProfile", back_populates="user", uselist=False)
 
 
 class MedicalRecord(Base):
@@ -20,6 +28,8 @@ class MedicalRecord(Base):
     content = Column(Text)
 
     owner = relationship("User", back_populates="records")
+
+
 class PatientProfile(Base):
     __tablename__ = "patient_profiles"
 
@@ -32,7 +42,8 @@ class PatientProfile(Base):
 
     recovery_days_total = Column(Integer, default=90)
 
-    user = relationship("User")
+    user = relationship("User", back_populates="profile")
+
 
 class RecoveryTask(Base):
     __tablename__ = "recovery_tasks"

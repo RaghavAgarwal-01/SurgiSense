@@ -57,7 +57,11 @@ className="bg-blue-600 text-white w-full p-2 rounded"
 >
 Login
 </button>
-
+<a href="http://localhost:8000/auth/google">
+<button className="bg-red-500 text-white w-full p-2 rounded mt-3">
+Continue with Google
+</button>
+</a>
 <p className="mt-3 text-sm">
 
 New user? <a href="/signup" className="text-blue-600">Signup</a>
