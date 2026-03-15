@@ -18,6 +18,7 @@ import {
   Upload,
   Sparkles,
   ShieldCheck,
+  LogOut,
 } from "lucide-react";
 import { Progress } from "../components/ui/Progress";
 import ReactMarkdown from 'react-markdown';
@@ -143,6 +144,19 @@ const fetchProfile = async () => {
   }
 
 };
+
+const handleLogout = async () => {
+  try {
+    await axios.post(`${API_BASE}/auth/logout`, {}, getAuthHeaders());
+  } catch (err) {
+    console.error("Logout API call failed", err);
+  }
+  
+  localStorage.removeItem("token");
+  localStorage.removeItem("surgisense_active_meds");
+  navigate("/login");
+};
+
  useEffect(() => {
 
   fetchUserRecords();
@@ -319,6 +333,13 @@ if (!profile) {
                 <Link to="/chat" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Chat</Link>
                 <Link to="/surgery-readiness" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Readiness</Link>
                 <Link to="/pharmacy" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Pharmacy</Link>
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors flex items-center gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
               </div>
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -361,6 +382,16 @@ if (!profile) {
                   <span className="text-[#D3D0BC] text-sm font-medium">{item.label}</span>
                 </Link>
               ))}
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setIsMenuOpen(false);
+                }}
+                className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors w-full"
+              >
+                <LogOut className="w-5 h-5 text-[#CBC3A5]" />
+                <span className="text-[#D3D0BC] text-sm font-medium">Logout</span>
+              </button>
             </div>
           </motion.div>
         )}
