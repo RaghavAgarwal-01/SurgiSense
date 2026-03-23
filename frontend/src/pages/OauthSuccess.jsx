@@ -13,9 +13,10 @@ const token = params.get("token")
 
 if(token){
 
+// Clear ALL previous user data before storing the new OAuth token.
+localStorage.clear()
 localStorage.setItem("token",token)
-
-navigate("/dashboard")
+navigate("/intake")
 
 }
 

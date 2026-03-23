@@ -51,6 +51,9 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/auth")
 app.include_router(google_router, prefix="/auth")
 
+from intake_routes import router as intake_router
+app.include_router(intake_router, prefix="/api")
+
 GROQ_KEY = os.getenv('GROQ_API_KEY')
 client = Groq(api_key=GROQ_KEY)
 speech_service = SpeechToTextService()
@@ -184,31 +187,79 @@ async def digitize_record(file: UploadFile = File(...), user = Depends(get_curre
 
 @app.post("/api/generate-tasks")
 async def generate_tasks(request: TaskGenerationRequest, user = Depends(get_current_user), db: Session = Depends(get_db)):
-    existing_tasks = db.query(RecoveryTask).filter(RecoveryTask.user_id == user.id).all()
-    if existing_tasks:
-        return {"status": "already_generated", "tasks": existing_tasks}
+    from datetime import date as date_type
+    today_str = date_type.today().isoformat()
+
+    # Check if tasks for TODAY already exist — if so return them directly as dicts
+    # (old code returned ORM objects which are not JSON serializable, and the
+    #  already_generated branch was skipped entirely by the frontend status check)
+    existing_today = db.query(RecoveryTask).filter(
+        RecoveryTask.user_id == user.id,
+        RecoveryTask.task_date == today_str
+    ).all()
+    if existing_today:
+        return {"status": "success", "tasks": [
+            {"id": t.id, "title": t.title, "time": t.time,
+             "status": t.status, "task_date": t.task_date, "is_critical": t.is_critical}
+            for t in existing_today
+        ]}
+
     try:
-        prompt = f"Return ONLY JSON: {{'tasks': [{{'title': 'name', 'time': '08:00 AM'}}]}} based on: {request.document_text}"
+        # Build a richer prompt that asks for critical flag and daily scheduling
+        prompt = f"""You are a clinical AI. Generate a daily task schedule for a patient based on their medical document.
+
+Return ONLY valid JSON in this exact format:
+{{
+  "tasks": [
+    {{
+      "title": "Take prescribed medication",
+      "time": "08:00 AM",
+      "is_critical": 1
+    }}
+  ]
+}}
+
+Rules:
+- Generate 6-10 tasks for a single day
+- Set is_critical=1 for: medication intake, wound dressing changes, vital sign checks, prescribed physiotherapy
+- Set is_critical=0 for: general rest, diet reminders, follow-up scheduling
+- Times should be spread across the day (morning, afternoon, evening)
+
+Medical document:
+{request.document_text}"""
+
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
         
-        content = response.choices[0].message.content
-        if not content:
+        content_str = response.choices[0].message.content
+        if not content_str:
             raise ValueError("No content from LLM")
             
-        data = json.loads(content)
+        data = json.loads(content_str)
         saved_tasks = []
         for task in data.get("tasks", []):
-            db_task = RecoveryTask(user_id=user.id, title=task.get("title"), time=task.get("time"), status="pending")
+            db_task = RecoveryTask(
+                user_id=user.id,
+                title=task.get("title"),
+                time=task.get("time"),
+                status="pending",
+                task_date=today_str,
+                is_critical=int(task.get("is_critical", 0))
+            )
             db.add(db_task)
             db.flush()
-            saved_tasks.append({"id": db_task.id, "title": db_task.title, "time": db_task.time, "status": db_task.status})
+            saved_tasks.append({
+                "id": db_task.id, "title": db_task.title, "time": db_task.time,
+                "status": db_task.status, "task_date": db_task.task_date,
+                "is_critical": db_task.is_critical
+            })
         db.commit()
         return {"status": "success", "tasks": saved_tasks}
     except Exception as e:
+        logger.error(f"Task generation failed: {e}")
         raise HTTPException(status_code=500, detail="Task generation failed")
 
 @app.post("/api/chat")
@@ -228,9 +279,201 @@ def get_my_records(user = Depends(get_current_user), db: Session = Depends(get_d
     return db.query(MedicalRecord).filter(MedicalRecord.user_id == user.id).all()
 
 @app.get("/api/my-tasks")
-def get_my_tasks(user = Depends(get_current_user), db: Session = Depends(get_db)):
-    tasks = db.query(RecoveryTask).filter(RecoveryTask.user_id == user.id).order_by(RecoveryTask.id).all()
-    return [{"id": t.id, "title": t.title, "time": t.time, "status": t.status} for t in tasks]
+def get_my_tasks(
+    date: str = None,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    from datetime import date as date_type
+    today_str = date_type.today().isoformat()
+    target_date = date or today_str
+
+    tasks = db.query(RecoveryTask).filter(
+        RecoveryTask.user_id == user.id,
+        RecoveryTask.task_date == target_date
+    ).order_by(RecoveryTask.id).all()
+
+    # Legacy fallback: tasks with no date — backfill them to today so they show up
+    if not tasks and target_date == today_str:
+        null_tasks = db.query(RecoveryTask).filter(
+            RecoveryTask.user_id == user.id,
+            RecoveryTask.task_date == None
+        ).order_by(RecoveryTask.id).all()
+
+        if null_tasks:
+            # Stamp today's date on them so future queries also work
+            for t in null_tasks:
+                t.task_date = today_str
+            db.commit()
+            tasks = null_tasks
+
+    logger.info(f"get_my_tasks: user={user.id} date={target_date} found={len(tasks)} tasks")
+    return [
+        {"id": t.id, "title": t.title, "time": t.time,
+         "status": t.status, "task_date": t.task_date,
+         "is_critical": getattr(t, "is_critical", 0)}
+        for t in tasks
+    ]
+
+
+@app.get("/api/debug-tasks")
+def debug_tasks(user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Debug: shows ALL tasks for this user with raw task_date values."""
+    all_tasks = db.query(RecoveryTask).filter(
+        RecoveryTask.user_id == user.id
+    ).order_by(RecoveryTask.id).all()
+    return {
+        "user_id": user.id,
+        "total": len(all_tasks),
+        "tasks": [
+            {"id": t.id, "title": t.title, "task_date": repr(t.task_date), "status": t.status}
+            for t in all_tasks
+        ]
+    }
+
+
+@app.get("/api/overdue-tasks")
+def get_overdue_tasks(user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Returns critical tasks that are past their scheduled time and still pending.
+    Called by the frontend every 5 minutes to trigger browser notifications.
+    """
+    from datetime import date as date_type, datetime as dt_type
+    today_str = date_type.today().isoformat()
+    now = dt_type.now()
+
+    tasks = db.query(RecoveryTask).filter(
+        RecoveryTask.user_id == user.id,
+        RecoveryTask.task_date == today_str,
+        RecoveryTask.is_critical == 1,
+        RecoveryTask.status == "pending"
+    ).all()
+
+    overdue = []
+    for t in tasks:
+        try:
+            # Parse "08:00 AM" style times
+            task_time = dt_type.strptime(f"{today_str} {t.time}", "%Y-%m-%d %I:%M %p")
+            minutes_overdue = (now - task_time).total_seconds() / 60
+            if minutes_overdue >= 120:   # 2 hours
+                overdue.append({
+                    "id": t.id, "title": t.title, "time": t.time,
+                    "minutes_overdue": round(minutes_overdue)
+                })
+        except Exception:
+            pass
+    return {"overdue": overdue}
+
+
+@app.post("/api/generate-daily-tasks")
+async def generate_daily_tasks(
+    request: TaskGenerationRequest,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generates tasks for EVERY day from today until the surgery/recovery end date.
+    Called once after intake submission. Uses the template generated for today
+    and creates copies for each remaining day so the user has a full schedule.
+    """
+    from datetime import date as date_type, timedelta
+
+    profile = db.query(PatientProfile).filter(PatientProfile.user_id == user.id).first()
+    if not profile or not profile.surgery_date:
+        raise HTTPException(status_code=400, detail="Surgery date not set in profile")
+
+    try:
+        surgery_date = date_type.fromisoformat(profile.surgery_date)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid surgery date format")
+
+    today = date_type.today()
+    phase = getattr(profile, "surgery_phase", "post") or "post"
+
+    # For pre-op: generate until day before surgery
+    # For post-op: generate for next 14 days (rolling window)
+    if phase == "pre":
+        end_date = surgery_date - timedelta(days=1)
+    else:
+        end_date = today + timedelta(days=14)
+
+    if end_date < today:
+        return {"status": "no_dates", "message": "No future dates to schedule"}
+
+    # Generate the base task template from the document (single day)
+    prompt = f"""You are a clinical AI. Generate a daily task schedule template for a patient.
+
+Return ONLY valid JSON:
+{{
+  "tasks": [
+    {{"title": "Take prescribed medication", "time": "08:00 AM", "is_critical": 1}}
+  ]
+}}
+
+Rules:
+- 6-10 tasks covering the full day
+- is_critical=1 for: medication, wound care, vitals, physiotherapy
+- is_critical=0 for: rest, diet, scheduling tasks
+- Spread times from 07:00 AM to 09:00 PM
+
+Medical document:
+{request.document_text}"""
+
+    resp = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"}
+    )
+    template_str = resp.choices[0].message.content
+    if not template_str:
+        raise HTTPException(status_code=500, detail="LLM returned empty response")
+
+    template = json.loads(template_str).get("tasks", [])
+    if not template:
+        raise HTTPException(status_code=500, detail="No tasks in template")
+
+    # Delete any existing future tasks for this user so we don't duplicate
+    db.query(RecoveryTask).filter(
+        RecoveryTask.user_id == user.id,
+        RecoveryTask.task_date >= today.isoformat()
+    ).delete(synchronize_session=False)
+
+    # Stamp the template onto every day in the range
+    total_days = (end_date - today).days + 1
+    created = 0
+    for day_offset in range(total_days):
+        day = today + timedelta(days=day_offset)
+        day_str = day.isoformat()
+        for task in template:
+            db.add(RecoveryTask(
+                user_id=user.id,
+                title=task.get("title"),
+                time=task.get("time"),
+                status="pending",
+                task_date=day_str,
+                is_critical=int(task.get("is_critical", 0))
+            ))
+            created += 1
+
+    db.commit()
+
+    # Return today's slice for immediate display
+    today_tasks = db.query(RecoveryTask).filter(
+        RecoveryTask.user_id == user.id,
+        RecoveryTask.task_date == today.isoformat()
+    ).order_by(RecoveryTask.id).all()
+
+    return {
+        "status": "success",
+        "days_scheduled": total_days,
+        "tasks_created": created,
+        "tasks": [
+            {"id": t.id, "title": t.title, "time": t.time,
+              "status": t.status, "task_date": t.task_date,
+              "is_critical": t.is_critical}
+            for t in today_tasks
+        ]
+    }
 
 @app.patch("/api/task/{task_id}")
 def update_task(task_id: int, user = Depends(get_current_user), db: Session = Depends(get_db)):

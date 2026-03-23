@@ -64,7 +64,7 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(null);
   const [woundAnalysis, setWoundAnalysis] = useState(null);
   const [woundPreview, setWoundPreview] = useState(null);
-  
+
   // NEW STATE: Controls when the Medication Pop-up shows
   const [pendingMedsData, setPendingMedsData] = useState(null);
 
@@ -91,6 +91,11 @@ export default function Dashboard() {
     { id: 'placeholder', title: "Upload Discharge Summary to generate today's schedule.", time: "--", status: "pending", type: "info" }
   ]);
 
+  // viewDate: which day's tasks are shown ("YYYY-MM-DD"). Defaults to today.
+  const [viewDate, setViewDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // Set of task IDs we've already fired a notification for — prevents repeat alerts
+  const notifiedTaskIds = useRef(new Set());
+
   const fetchUserRecords = async () => {
     try {
       const res = await axios.get(`${API_BASE}/api/my-records`, getAuthHeaders());
@@ -104,10 +109,19 @@ export default function Dashboard() {
     }
   };
 
-  const fetchTasks = async () => {
+  const fetchTasks = async (dateStr) => {
+    const date = dateStr || new Date().toISOString().slice(0, 10);
     try {
-      const res = await axios.get(`${API_BASE}/api/my-tasks`, getAuthHeaders());
-      if (res.data.length > 0) setTasks(res.data);
+      const res = await axios.get(
+        `${API_BASE}/api/my-tasks?date=${date}`,
+        getAuthHeaders()
+      );
+      if (res.data && res.data.length > 0) {
+        setTasks(res.data);
+      } else {
+        // No tasks for this date — clear the list so the "no tasks" UI shows
+        setTasks([]);
+      }
     } catch (err) {
       console.error("Failed to load tasks", err);
     }
@@ -133,10 +147,35 @@ export default function Dashboard() {
     navigate("/login");
   };
 
+  // Notification permission + overdue polling every 5 minutes
+  useEffect(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+    const pollOverdue = async () => {
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+      try {
+        const res = await axios.get(`${API_BASE}/api/overdue-tasks`, getAuthHeaders());
+        (res.data.overdue || []).forEach(task => {
+          if (notifiedTaskIds.current.has(task.id)) return; // already notified
+          notifiedTaskIds.current.add(task.id);
+          new Notification('⚠️ Overdue task — SurgiSense', {
+            body: `${task.title} was due at ${task.time} · ${task.minutes_overdue} min ago`,
+            icon: '/favicon.ico',
+            tag: `task-${task.id}`,      // deduplicates OS-level toasts
+          });
+        });
+      } catch (_) {}
+    };
+    pollOverdue();
+    const interval = setInterval(pollOverdue, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     fetchUserRecords();
     fetchProfile();
-    fetchTasks();
+    fetchTasks(new Date().toISOString().slice(0, 10));
 
     let ticking = false;
     const handleScroll = () => {
@@ -159,13 +198,18 @@ export default function Dashboard() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Re-fetch whenever the user browses to a different date
+  useEffect(() => {
+    fetchTasks(viewDate);
+  }, [viewDate]);
+
   const calculateRecoveryDay = (date) => {
     if (!date) return 0;
     const surgeryDate = new Date(date);
     const today = new Date();
     const diff = today - surgeryDate;
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    return Math.max(days, 0); 
+    return Math.max(days, 0);
   };
 
   const calculateRecoveryProgress = (date, totalDays = 90) => {
@@ -190,7 +234,7 @@ export default function Dashboard() {
       if (!taskToUpdate || taskToUpdate.status === "completed") return;
 
       await axios.patch(`${API_BASE}/api/task/${taskId}`, {}, getAuthHeaders());
-      
+
       setTasks(tasks.map(task =>
         task.id === taskId ? { ...task, status: "completed" } : task
       ));
@@ -200,31 +244,31 @@ export default function Dashboard() {
         // Find the medicine name from the task (Supports "-" or ":")
         const separator = taskToUpdate.title.includes("-") ? "-" : ":";
         const medNameFromTask = taskToUpdate.title.split(separator)[1]?.trim().toLowerCase();
-        
+
         console.log(`Task clicked: ${taskToUpdate.title}. Searching inventory for:`, medNameFromTask);
 
         if (medNameFromTask) {
           let activeMeds = JSON.parse(localStorage.getItem('surgisense_active_meds')) || [];
           let wasUpdated = false;
-          
+
           activeMeds = activeMeds.map(med => {
             const name = (med.name || med.medication_name || "").toLowerCase();
-            
+
             // FUZZY MATCH: "amoxicillin 500mg" will now successfully match "amoxicillin"
             if (name.includes(medNameFromTask) || medNameFromTask.includes(name)) {
               console.log(`✅ Found match in inventory: ${med.name || med.medication_name}`);
               wasUpdated = true;
-              
+
               // Check if they have set up inventory for this med on the Pharmacy page
               if (med.currentQuantity !== undefined && med.currentQuantity !== null) {
                 const dose = med.doseAmount ? Number(med.doseAmount) : 1;
                 const remaining = Math.max(0, med.currentQuantity - dose);
-                
+
                 console.log(`💊 Deducting ${dose} dose. Remaining: ${remaining}`);
-                return { 
-                  ...med, 
+                return {
+                  ...med,
                   currentQuantity: remaining,
-                  dosesTaken: (med.dosesTaken || 0) + 1    
+                  dosesTaken: (med.dosesTaken || 0) + 1
                 };
               } else {
                 console.log("⚠️ Inventory not set up for this med yet. Go to Pharmacy page to Track it first.");
@@ -232,7 +276,7 @@ export default function Dashboard() {
             }
             return med;
           });
-          
+
           if (wasUpdated) {
             localStorage.setItem('surgisense_active_meds', JSON.stringify(activeMeds));
           } else {
@@ -254,26 +298,38 @@ export default function Dashboard() {
       setLoadingRecord(true);
       const res = await axios.post(`${API_BASE}/api/digitize-record`, formData, getAuthHeaders());
       const extractedData = res.data.data;
-      
+
       console.log("=== DIGITIZATION RESPONSE ===");
       console.log("Full response:", res.data);
       console.log("Extracted Data:", extractedData);
       console.log("Medications in extracted data:", extractedData?.medications);
-      
+
       setDigitizedData(extractedData);
-      
+
       // TRIGGER THE MODAL POPUP INSTEAD OF SAVING DIRECTLY
       setPendingMedsData(extractedData);
-      
+
       try {
-        const tasksRes = await axios.post(`${API_BASE}/api/generate-tasks`, {
+        // generate-daily-tasks creates a task schedule for every day until
+        // surgery (pre-op) or for the next 14 days (post-op), then returns
+        // today's slice. Falls back to single-day generate-tasks if needed.
+        const tasksRes = await axios.post(`${API_BASE}/api/generate-daily-tasks`, {
           document_text: JSON.stringify(extractedData)
         }, getAuthHeaders());
-        if (tasksRes.data.status === 'success' && tasksRes.data.tasks.length > 0) {
+        if (tasksRes.data.tasks && tasksRes.data.tasks.length > 0) {
           setTasks(tasksRes.data.tasks);
         }
       } catch (taskErr) {
         console.error("Task generation failed", taskErr);
+        // Fallback to single-day
+        try {
+          const fallback = await axios.post(`${API_BASE}/api/generate-tasks`, {
+            document_text: JSON.stringify(extractedData)
+          }, getAuthHeaders());
+          if (fallback.data.tasks && fallback.data.tasks.length > 0) {
+            setTasks(fallback.data.tasks);
+          }
+        } catch (_) {}
       }
     } catch (err) {
       console.error("Digitization failed", err);
@@ -291,13 +347,30 @@ export default function Dashboard() {
       ]
     : [];
 
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
-  const totalTasks = tasks.filter(t => t.id !== 'placeholder').length;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const realTasks = tasks.filter(t => t.id !== 'placeholder');
+  const completedTasks = realTasks.filter(t => t.status === 'completed').length;
+  const totalTasks = realTasks.length;
+  const hasOverdueCritical = realTasks.some(t =>
+    t.is_critical === 1 && t.status === 'pending' && (() => {
+      try {
+        const [time, meridiem] = (t.time || '').split(' ');
+        const [h, m] = time.split(':').map(Number);
+        const now = new Date();
+        const taskDate = new Date();
+        let hours = h;
+        if (meridiem === 'PM' && h !== 12) hours += 12;
+        if (meridiem === 'AM' && h === 12) hours = 0;
+        taskDate.setHours(hours, m, 0, 0);
+        return (now - taskDate) / 60000 >= 120;
+      } catch { return false; }
+    })()
+  );
 
   // Real-time active medications from local storage or fallback to AI data
   const savedMedsRaw = localStorage.getItem('surgisense_active_meds');
-  const activeMedications = savedMedsRaw 
-    ? JSON.parse(savedMedsRaw) 
+  const activeMedications = savedMedsRaw
+    ? JSON.parse(savedMedsRaw)
     : (digitizedData?.medication_list || digitizedData?.medications || []);
 
   useEffect(() => {
@@ -312,11 +385,11 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-linear-to-b from-[#D3D0BC] to-[#D3D0BC]/90">
-      
+
       {/* POP-UP OVERLAY FOR MEDICATION SELECTOR */}
       <AnimatePresence>
         {pendingMedsData && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -328,12 +401,12 @@ export default function Dashboard() {
               exit={{ scale: 0.95, y: 20 }}
               className="w-full max-w-md"
             >
-              <MedicationSelector 
-                extractedData={pendingMedsData} 
+              <MedicationSelector
+                extractedData={pendingMedsData}
                 onComplete={() => {
                   setPendingMedsData(null); // Hide the popup
                   navigate("/pharmacy"); // Automatically send them to the pharmacy page
-                }} 
+                }}
               />
             </motion.div>
           </motion.div>
@@ -403,7 +476,7 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-5 pt-28 pb-24 space-y-6">
-        
+
         {/* Quick Actions */}
         <motion.div initial="hidden" animate="visible" variants={fadeIn} className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
@@ -425,29 +498,137 @@ export default function Dashboard() {
           })}
         </motion.div>
 
-        {/* Recovery Timeline */}
-        <motion.section id="timeline" className="scroll-mt-28" initial="hidden" animate="visible" variants={fadeIn}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[#3E435D] text-xl font-bold tracking-tight">Today's Recovery Tasks</h2>
-            {totalTasks > 0 && <span className="text-[#9AA7B1] text-sm font-medium">{completedTasks}/{totalTasks} done</span>}
+        {/* Recovery Tasks */}
+        <motion.section
+          id="timeline"
+          className="scroll-mt-28"
+          initial="hidden"
+          animate="visible"
+          variants={fadeIn}
+        >
+          {/* Section header */}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[#3E435D] text-xl font-bold tracking-tight">
+              Recovery Tasks
+            </h2>
+            {totalTasks > 0 && (
+              <span className="text-[#9AA7B1] text-sm font-medium">
+                {completedTasks}/{totalTasks} done
+              </span>
+            )}
           </div>
+
+          {/* Overdue critical alert banner */}
+          {hasOverdueCritical && viewDate === todayStr && (
+            <div className="mb-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-center gap-3">
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+              <p className="text-xs text-red-700 font-medium">
+                One or more critical tasks are overdue by 2+ hours. Please complete them immediately.
+              </p>
+            </div>
+          )}
+
+          {/* Date navigator */}
+          <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1 scrollbar-hide">
+            {Array.from({ length: 7 }, (_, i) => {
+              const d = new Date();
+              d.setDate(d.getDate() + i - 2); // show 2 days back, today, 4 days forward
+              const dStr = d.toISOString().slice(0, 10);
+              const isToday = dStr === todayStr;
+              const isSelected = dStr === viewDate;
+              const dayLabel = isToday ? 'Today' : d.toLocaleDateString('en-IN', { weekday: 'short' });
+              const dateLabel = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+              return (
+                <button
+                  key={dStr}
+                  onClick={() => setViewDate(dStr)}
+                  className={`flex flex-col items-center px-3 py-2 rounded-xl border text-xs font-medium shrink-0 transition-all ${
+                    isSelected
+                      ? 'bg-[#3E435D] border-[#3E435D] text-[#D3D0BC]'
+                      : 'bg-white/80 border-[#3E435D]/10 text-[#9AA7B1] hover:border-[#3E435D]/30'
+                  }`}
+                >
+                  <span className="text-[10px] uppercase tracking-wide">{dayLabel}</span>
+                  <span className={isSelected ? 'text-[#D3D0BC]' : 'text-[#3E435D]'}>{dateLabel}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Task list */}
           <div className="space-y-2.5">
-            {tasks.map((task) => (
-              <div key={task.id} onClick={() => toggleTaskStatus(task.id)} className={`group bg-white/80 backdrop-blur-sm rounded-xl p-4 border-l-[3px] cursor-pointer transition-all duration-200 hover:bg-white hover:shadow-md ${task.status === "completed" ? "border-[#9AA7B1] opacity-70" : "border-[#CBC3A5]"}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {task.status === "completed" ? <CheckCircle className="w-5 h-5 text-[#9AA7B1]" /> : <Clock className="w-5 h-5 text-[#CBC3A5]" />}
-                    <div>
-                      <h3 className={`font-medium text-sm ${task.status === "completed" ? "text-[#9AA7B1] line-through" : "text-[#3E435D]"}`}>{task.title}</h3>
-                      <p className="text-[#9AA7B1] text-xs">{task.time}</p>
+            {tasks.length === 0 || (tasks.length === 1 && tasks[0].id === 'placeholder') ? (
+              <div className="bg-white/80 rounded-xl p-6 text-center border border-dashed border-[#CBC3A5]/50">
+                <p className="text-[#9AA7B1] text-sm">No tasks scheduled for this day.</p>
+                <p className="text-[#9AA7B1] text-xs mt-1">Upload a discharge summary to generate your schedule.</p>
+              </div>
+            ) : (
+              tasks.filter(t => t.id !== 'placeholder').map((task) => {
+                const isOverdue = task.is_critical === 1 && task.status === 'pending' && (() => {
+                  try {
+                    const [time, mer] = (task.time || '').split(' ');
+                    const [h, m] = time.split(':').map(Number);
+                    const now = new Date();
+                    const td = new Date();
+                    let hrs = h;
+                    if (mer === 'PM' && h !== 12) hrs += 12;
+                    if (mer === 'AM' && h === 12) hrs = 0;
+                    td.setHours(hrs, m, 0, 0);
+                    return (now - td) / 60000 >= 120;
+                  } catch { return false; }
+                })();
+
+                return (
+                  <div
+                    key={task.id}
+                    onClick={() => viewDate === todayStr ? toggleTaskStatus(task.id) : null}
+                    className={`group bg-white/80 backdrop-blur-sm rounded-xl p-4 border-l-[3px] transition-all duration-200
+                      ${viewDate === todayStr ? 'cursor-pointer hover:bg-white hover:shadow-md' : 'cursor-default opacity-80'}
+                      ${task.status === 'completed' ? 'border-[#9AA7B1] opacity-60' : isOverdue ? 'border-red-400' : task.is_critical === 1 ? 'border-amber-400' : 'border-[#CBC3A5]'}
+                    `}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {task.status === 'completed' ? (
+                          <CheckCircle className="w-5 h-5 text-[#9AA7B1] shrink-0" />
+                        ) : isOverdue ? (
+                          <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+                        ) : (
+                          <Clock className={`w-5 h-5 shrink-0 ${task.is_critical === 1 ? 'text-amber-400' : 'text-[#CBC3A5]'}`} />
+                        )}
+                        <div className="min-w-0">
+                          <h3 className={`font-medium text-sm truncate ${
+                            task.status === 'completed' ? 'text-[#9AA7B1] line-through' : 'text-[#3E435D]'
+                          }`}>
+                            {task.title}
+                          </h3>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-[#9AA7B1] text-xs">{task.time}</p>
+                            {task.is_critical === 1 && task.status !== 'completed' && (
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                isOverdue ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                {isOverdue ? 'OVERDUE' : 'CRITICAL'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <span className={`px-3 py-1 rounded-lg text-xs font-medium shrink-0 ${
+                        task.status === 'completed'
+                          ? 'bg-[#9AA7B1]/15 text-[#9AA7B1]'
+                          : isOverdue
+                            ? 'bg-red-100 text-red-600'
+                            : 'bg-[#CBC3A5]/20 text-[#3E435D]'
+                      }`}>
+                        {task.status === 'completed' ? 'Done' : isOverdue ? 'Overdue' : 'Pending'}
+                      </span>
                     </div>
                   </div>
-                  <span className={`px-3 py-1 rounded-lg text-xs font-medium ${task.status === "completed" ? "bg-[#9AA7B1]/15 text-[#9AA7B1]" : "bg-[#CBC3A5]/20 text-[#3E435D]"}`}>
-                    {task.status === "completed" ? "Done" : "Pending"}
-                  </span>
-                </div>
-              </div>
-            ))}
+                );
+              })
+            )}
           </div>
         </motion.section>
 
