@@ -290,7 +290,12 @@ def search_medicine_prices(medicine: str):
     AUTONOMOUS PROCUREMENT AGENT:
     Queries Google Shopping live data to find the cheapest vendors.
     """
-    SERP_API_KEY = "b88df29866b24d0487521c395852f1c9f9bb3e3d1458c61268a860749a4452af"
+    # ENTERPRISE SECURITY: Pull key from secure environment variables
+    SERP_API_KEY = os.getenv("SERP_API_KEY")
+    
+    if not SERP_API_KEY:
+        logger.error("Security Alert: SERP_API_KEY missing from environment.")
+        return {"status": "error", "message": "Procurement agent is offline."}
     
     try:
         url = f"https://serpapi.com/search.json?engine=google_shopping&q={medicine}+medicine&hl=en&gl=in&api_key={SERP_API_KEY}"
