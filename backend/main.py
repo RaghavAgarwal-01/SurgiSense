@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import fitz
 from groq import Groq
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from dependencies import get_current_user, get_db
 from models import MedicalRecord, User, PatientProfile, RecoveryTask
 from services.rules import evaluate_patient
@@ -21,10 +20,8 @@ from services.chat import MedicalRAGService
 from auth_routes import router as auth_router
 from database import Base, engine, SessionLocal
 from starlette.middleware.sessions import SessionMiddleware
-import requests
+import requests 
 from math import radians, cos, sin, asin, sqrt
-
-Base.metadata.create_all(bind=engine)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
@@ -33,10 +30,15 @@ load_dotenv(dotenv_path=ENV_PATH)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+Base.metadata.create_all(bind=engine)
+
 rag = MedicalRAGService()
 app = FastAPI(title="SurgiSense AI Backend")
 
-app.add_middleware(SessionMiddleware, secret_key="supersecretkey")
+# Get session secret from environment or use default for dev
+SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-secret-key-change-in-production")
+
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],

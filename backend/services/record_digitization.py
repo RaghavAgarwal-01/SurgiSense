@@ -71,4 +71,21 @@ Discharge Summary:
         "medications": ai_json.get("medications", [])
     }
 
+    # ENSURE MEDICATIONS HAVE PROPER 'name' FIELD FOR FRONTEND
+    if normalized["medications"]:
+        normalized["medications"] = [
+            {
+                "name": med.get("name") or med.get("medication_name") or med.get("medication") or "Unknown",
+                "dosage": med.get("dosage") or med.get("dose") or "",
+                "frequency": med.get("frequency") or "",
+                "duration": med.get("duration") or "",
+                **med  # Keep all original fields as well
+            }
+            for med in normalized["medications"]
+        ]
+        logging.info(f"✅ Extracted {len(normalized['medications'])} medications: {[m.get('name') for m in normalized['medications']]}")
+    else:
+        logging.warning("⚠️ NO MEDICATIONS FOUND IN EXTRACTED DATA")
+        logging.warning(f"Full extracted data: {ai_json}")
+
     return normalized
