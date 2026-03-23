@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, Pill, AlertCircle, Clock, CheckCircle, Package, MapPin, Navigation, Loader2, Plus, Minus } from "lucide-react";
+import { ChevronLeft, Pill, AlertCircle, Clock, CheckCircle, Package, MapPin, Navigation, Loader2, Plus, Minus, ShoppingCart, ExternalLink, X } from "lucide-react";
 import { Progress } from "../components/ui/Progress"; 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 
 const fadeIn = {
@@ -13,33 +13,31 @@ const fadeIn = {
 export default function Pharmacy() {
   const [medications, setMedications] = useState([]);
   
-  // Pharmacy API States
   const [nearbyPharmacies, setNearbyPharmacies] = useState([]);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [locationError, setLocationError] = useState(null);
 
-  // Manual inventory tracking states
   const [showAddForm, setShowAddForm] = useState(false);
   const [newMed, setNewMed] = useState({ name: "", type: "Tablet", totalQuantity: "", doseAmount: "1" });
 
+  const [reorderItem, setReorderItem] = useState(null);
+  const [isSearchingPrices, setIsSearchingPrices] = useState(false);
+  const [vendorOptions, setVendorOptions] = useState([]);
+
   useEffect(() => {
-    // Load medications from local storage (Extracted from the AI PDF)
     const saved = localStorage.getItem('surgisense_active_meds');
     if (saved) {
       try {
         const parsedMeds = JSON.parse(saved);
         if (parsedMeds && Array.isArray(parsedMeds) && parsedMeds.length > 0) {
-          // Normalize medication objects to ensure they have required fields
           const initializedMeds = parsedMeds.map((m, idx) => ({
             id: m.id || Math.random().toString(36).substr(2, 9),
-            // Support both 'name' and 'medication_name' properties
             name: m.name || m.medication_name || `Medication ${idx + 1}`,
             medication_name: m.medication_name || m.name || `Medication ${idx + 1}`,
             dosage: m.dosage || m.instructions || "Take as directed",
             ...m,
           }));
           setMedications(initializedMeds);
-          console.log("Loaded medications:", initializedMeds);
         }
       } catch (e) {
         console.error("Failed to parse meds:", e);
@@ -48,7 +46,6 @@ export default function Pharmacy() {
     findNearby();
   }, []);
 
-  // Save back to local storage whenever inventory updates
   useEffect(() => {
     if (medications.length > 0) {
       localStorage.setItem('surgisense_active_meds', JSON.stringify(medications));
@@ -86,13 +83,10 @@ export default function Pharmacy() {
     );
   };
 
-  // --- INVENTORY TRACKING LOGIC --- //
-
   const handleAddMedication = (e) => {
     e.preventDefault();
     if (!newMed.name || !newMed.totalQuantity) return;
 
-    // Find the medicine they selected from the dropdown and update its inventory
     const updatedMeds = medications.map(med => {
       const medName = med.name || med.medication_name;
       if (medName === newMed.name) {
@@ -122,9 +116,33 @@ export default function Pharmacy() {
     }));
   };
 
+  const handleReorderClick = async (med) => {
+    setReorderItem(med);
+    setIsSearchingPrices(true);
+    
+    try {
+      const medName = med.name || med.medication_name;
+      const res = await axios.get(
+        `http://localhost:8000/api/pharmacy/search-prices?medicine=${encodeURIComponent(medName)}`
+      );
+      
+      if (res.data && res.data.vendors) {
+        setVendorOptions(res.data.vendors);
+      } else {
+        setVendorOptions([]);
+      }
+    } catch (error) {
+      console.error("Agent failed to fetch real-time prices:", error);
+      setVendorOptions([
+        { vendor: "Error fetching data", price: "N/A", delivery: "Try again later", url: "#" }
+      ]);
+    } finally {
+      setIsSearchingPrices(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-linear-to-b from-[#D3D0BC] to-[#D3D0BC]/90 pb-10">
-      {/* Header */}
       <header className="bg-[#3E435D]/95 backdrop-blur-md px-5 py-3 sticky top-0 z-10 border-b border-white/5">
         <div className="max-w-4xl mx-auto flex items-center gap-3">
           <Link to="/dashboard" className="text-[#D3D0BC] hover:bg-white/10 p-1.5 rounded-lg transition-colors">
@@ -142,7 +160,6 @@ export default function Pharmacy() {
 
       <motion.div initial="hidden" animate="visible" variants={fadeIn} className="max-w-4xl mx-auto px-5 py-6 space-y-5">
         
-        {/* Active Medications Section */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[#3E435D] text-xl font-bold tracking-tight">Active Medications</h2>
@@ -154,13 +171,10 @@ export default function Pharmacy() {
             </button>
           </div>
 
-          {/* Add Medication Form */}
           {showAddForm && (
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 mb-5 border border-[#3E435D]/10 shadow-sm">
               <h3 className="text-[#3E435D] font-bold text-sm mb-3">Set Up Inventory Tracking</h3>
               <form onSubmit={handleAddMedication} className="space-y-3">
-                
-                {/* THE NEW DROPDOWN MAPPED FROM THE AI REPORT */}
                 <select 
                   required
                   value={newMed.name} 
@@ -227,10 +241,19 @@ export default function Pharmacy() {
                           <p className="text-[#9AA7B1] text-sm">{med.dosage || "Inventory not setup"}</p>
                         )}
                       </div>
+                      
                       {isLow && (
-                        <span className="bg-red-100 text-red-600 px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1">
-                          <AlertCircle className="w-3.5 h-3.5" /> Low Supply
-                        </span>
+                        <div className="flex flex-col items-end gap-2">
+                          <span className="bg-red-100 text-red-600 px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" /> Low Supply
+                          </span>
+                          <button 
+                            onClick={() => handleReorderClick(med)}
+                            className="bg-[#3E435D] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#4a5070] transition-colors flex items-center gap-1.5 shadow-sm animate-pulse"
+                          >
+                            <ShoppingCart className="w-3.5 h-3.5" /> Reorder
+                          </button>
+                        </div>
                       )}
                     </div>
                     
@@ -268,7 +291,6 @@ export default function Pharmacy() {
           )}
         </section>
 
-        {/* NEAREST PHARMACIES (API Integrated) */}
         <section className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 border border-[#3E435D]/5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2.5">
@@ -310,7 +332,7 @@ export default function Pharmacy() {
                     </p>
                   </div>
                   <button 
-                    onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(pharm.name + ' ' + pharm.address)}`, '_blank')}
+                    onClick={() => window.open(`http://googleusercontent.com/maps.google.com/?q=${encodeURIComponent(pharm.name + ' ' + pharm.address)}`, '_blank')}
                     className="p-3 bg-[#3E435D] text-[#D3D0BC] rounded-xl hover:bg-[#4a5070] transition-colors shadow-sm shrink-0"
                   >
                     <Navigation className="w-5 h-5" />
@@ -328,6 +350,81 @@ export default function Pharmacy() {
         </section>
 
       </motion.div>
+
+      <AnimatePresence>
+        {reorderItem && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#3E435D]/60 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl"
+            >
+              <div className="bg-[#3E435D] px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-[#CBC3A5]" />
+                  <h3 className="text-[#D3D0BC] font-bold text-lg">Restock Medicine</h3>
+                </div>
+                <button 
+                  onClick={() => setReorderItem(null)}
+                  className="text-[#D3D0BC] hover:bg-white/10 p-1.5 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6">
+                <div className="mb-5 text-center">
+                  <p className="text-[#9AA7B1] text-xs font-semibold uppercase tracking-wider mb-1">Searching best prices for</p>
+                  <h2 className="text-[#3E435D] text-xl font-bold">{reorderItem.name || reorderItem.medication_name}</h2>
+                </div>
+
+                {isSearchingPrices ? (
+                  <div className="flex flex-col items-center justify-center py-8 gap-3 border-2 border-dashed border-[#CBC3A5]/30 rounded-2xl bg-[#D3D0BC]/10">
+                    <Loader2 className="w-8 h-8 text-[#3E435D] animate-spin" />
+                    <p className="text-[#596079] text-sm font-medium">Agent scanning pharmacy APIs...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {vendorOptions.map((option, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-4 rounded-xl border border-[#CBC3A5]/50 bg-[#D3D0BC]/10 hover:bg-[#D3D0BC]/20 transition-colors">
+                        <div className="flex-1 pr-3">
+                          <h4 className="text-[#3E435D] font-bold text-sm truncate">{option.vendor}</h4>
+                          <p className="text-green-600 font-extrabold text-lg leading-tight">{option.price}</p>
+                          <p className="text-[#9AA7B1] text-xs mt-0.5 flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> {option.delivery}
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            window.open(option.url, '_blank');
+                            setReorderItem(null); 
+                          }}
+                          className="bg-[#CBC3A5] text-[#3E435D] px-4 py-2 rounded-xl text-sm font-bold hover:bg-[#b5ad90] transition-colors flex items-center gap-1.5 shadow-sm"
+                        >
+                          Buy <ExternalLink className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <button 
+                  onClick={() => setReorderItem(null)}
+                  className="w-full mt-5 py-2.5 text-[#596079] font-semibold text-sm hover:bg-gray-50 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

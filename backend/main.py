@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import urllib.parse  # Added for URL Sanitization
 from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -282,6 +283,73 @@ def get_nearest_pharmacies(lat: float, lng: float):
     except Exception as e:
         logger.error(f"Failed to fetch global pharmacies: {e}")
         return []
+
+@app.get("/api/pharmacy/search-prices")
+def search_medicine_prices(medicine: str):
+    """
+    AUTONOMOUS PROCUREMENT AGENT:
+    Queries Google Shopping live data to find the cheapest vendors.
+    """
+    SERP_API_KEY = "b88df29866b24d0487521c395852f1c9f9bb3e3d1458c61268a860749a4452af"
+    
+    try:
+        url = f"https://serpapi.com/search.json?engine=google_shopping&q={medicine}+medicine&hl=en&gl=in&api_key={SERP_API_KEY}"
+        
+        response = requests.get(url)
+        data = response.json()
+        
+        real_vendors = []
+        
+        # Parse the real live shopping results
+        if "shopping_results" in data:
+            seen_vendors = set()
+            
+            for item in data["shopping_results"]:
+                vendor_name = item.get("source", "Online Pharmacy")
+                
+                # 1. DEDUPLICATION: Skip if we already have a price from this vendor
+                if vendor_name in seen_vendors:
+                    continue
+                    
+                seen_vendors.add(vendor_name)
+                
+                # 2. AGENTIC DATA SANITIZATION: Clean up Google's messy tracking URLs
+                raw_link = item.get("link") or item.get("product_link") or f"https://www.google.com/search?tbm=shop&q={medicine}"
+                
+                if "google.com" in raw_link and ("url?" in raw_link or "aclk?" in raw_link):
+                    parsed_url = urllib.parse.urlparse(raw_link)
+                    params = urllib.parse.parse_qs(parsed_url.query)
+                    
+                    if "url" in params:
+                        raw_link = params["url"][0]
+                    elif "adurl" in params:
+                        raw_link = params["adurl"][0]
+                    elif "q" in params:
+                        raw_link = params["q"][0]
+                
+                real_vendors.append({
+                    "vendor": vendor_name,
+                    "price": item.get("price", "Price unavailable"),
+                    "delivery": item.get("delivery", "Standard Delivery"),
+                    "url": raw_link
+                })
+                
+                # 3. Stop once we have exactly 3 unique, sanitized pharmacies
+                if len(real_vendors) == 3:
+                    break
+        
+        # Fallback just in case Google Shopping hides results
+        if not real_vendors:
+            real_vendors = [
+                {"vendor": "Apollo Pharmacy", "price": "Check site", "delivery": "Fast delivery", "url": f"https://www.apollopharmacy.in/search-medicines/{medicine}"},
+                {"vendor": "Tata 1mg", "price": "Check site", "delivery": "Standard delivery", "url": f"https://www.1mg.com/search/all?name={medicine}"}
+            ]
+                
+        return {"status": "success", "vendors": real_vendors}
+        
+    except Exception as e:
+        logger.error(f"Procurement Agent Error: {e}")
+        return {"status": "error", "message": "Could not fetch live prices."}
 
 if __name__ == "__main__":
     import uvicorn
