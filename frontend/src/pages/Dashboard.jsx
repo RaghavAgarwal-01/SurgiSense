@@ -27,6 +27,9 @@ import axios from "axios";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+// IMPORT YOUR NEW COMPONENT HERE
+import MedicationSelector from "../components/ui/medication_selector";
+
 const API_BASE = "http://localhost:8000";
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
@@ -36,30 +39,34 @@ const getAuthHeaders = () => {
     }
   };
 };
+
 const fadeIn = {
   hidden: { opacity: 0, y: 16 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
 };
 
 export default function Dashboard() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
-useEffect(() => {
-  const token = localStorage.getItem("token")
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+    }
+  }, []);
 
-  if (!token) {
-    navigate("/login")
-  }
-}, [])
   const [digitizedData, setDigitizedData] = useState(null);
   const [loadingRecord, setLoadingRecord] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const lastScrollYRef = useRef(0);
   const headerRef = useRef(null);
-  const [profile,setProfile] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [woundAnalysis, setWoundAnalysis] = useState(null);
   const [woundPreview, setWoundPreview] = useState(null);
+  
+  // NEW STATE: Controls when the Medication Pop-up shows
+  const [pendingMedsData, setPendingMedsData] = useState(null);
 
   const handleWoundAnalysis = (analysis, preview) => {
     setWoundAnalysis(analysis);
@@ -83,167 +90,161 @@ useEffect(() => {
   const [tasks, setTasks] = useState([
     { id: 'placeholder', title: "Upload Discharge Summary to generate today's schedule.", time: "--", status: "pending", type: "info" }
   ]);
-const fetchUserRecords = async () => {
-  try {
 
-    const res = await axios.get(
-      `${API_BASE}/api/my-records`,
-      getAuthHeaders()
-    );
-
-    if (res.data.length > 0) {
-      const latest = res.data[res.data.length - 1];
-      const parsed = JSON.parse(latest.content);
-
-      setDigitizedData(parsed);
-    }
-
-  } catch (err) {
-    console.error("Failed to load records", err);
-  }
-};
-const fetchTasks = async () => {
-
-  try {
-
-    const res = await axios.get(
-      `${API_BASE}/api/my-tasks`,
-      getAuthHeaders()
-    );
-
-    setTasks(res.data);
-
-  } catch (err) {
-
-    console.error("Failed to load tasks", err);
-
-  }
-
-};
-const fetchProfile = async () => {
-
-  try {
-
-    const token = localStorage.getItem("token");
-
-    const res = await axios.get(
-      `${API_BASE}/api/profile`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+  const fetchUserRecords = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/my-records`, getAuthHeaders());
+      if (res.data.length > 0) {
+        const latest = res.data[res.data.length - 1];
+        const parsed = JSON.parse(latest.content);
+        setDigitizedData(parsed);
       }
-    );
-
-    setProfile(res.data);
-
-  } catch (err) {
-
-    console.error("Failed to load profile", err);
-
-  }
-
-};
-
-const handleLogout = async () => {
-  try {
-    await axios.post(`${API_BASE}/auth/logout`, {}, getAuthHeaders());
-  } catch (err) {
-    console.error("Logout API call failed", err);
-  }
-  
-  localStorage.removeItem("token");
-  localStorage.removeItem("surgisense_active_meds");
-  navigate("/login");
-};
-
- useEffect(() => {
-
-  fetchUserRecords();
-  fetchProfile();
-  fetchTasks();
-
-  let ticking = false;
-
-  const handleScroll = () => {
-    if (!ticking) {
-      window.requestAnimationFrame(() => {
-        const currentScrollY = window.scrollY;
-
-        if (currentScrollY < lastScrollYRef.current || currentScrollY < 10) {
-          setIsNavVisible(true);
-        } else if (currentScrollY > lastScrollYRef.current && currentScrollY > 80) {
-          setIsNavVisible(false);
-          setIsMenuOpen(false);
-        }
-
-        lastScrollYRef.current = currentScrollY;
-        ticking = false;
-      });
-
-      ticking = true;
+    } catch (err) {
+      console.error("Failed to load records", err);
     }
   };
 
-  window.addEventListener("scroll", handleScroll, { passive: true });
+  const fetchTasks = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/my-tasks`, getAuthHeaders());
+      if (res.data.length > 0) setTasks(res.data);
+    } catch (err) {
+      console.error("Failed to load tasks", err);
+    }
+  };
 
-  return () => window.removeEventListener("scroll", handleScroll);
+  const fetchProfile = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/profile`, getAuthHeaders());
+      setProfile(res.data);
+    } catch (err) {
+      console.error("Failed to load profile", err);
+    }
+  };
 
-}, []);
-const calculateRecoveryDay = (date) => {
+  const handleLogout = async () => {
+    try {
+      await axios.post(`${API_BASE}/auth/logout`, {}, getAuthHeaders());
+    } catch (err) {
+      console.error("Logout API call failed", err);
+    }
+    localStorage.removeItem("token");
+    localStorage.removeItem("surgisense_active_meds");
+    navigate("/login");
+  };
 
-  if (!date) return 0;
+  useEffect(() => {
+    fetchUserRecords();
+    fetchProfile();
+    fetchTasks();
 
-  const surgeryDate = new Date(date);
-  const today = new Date();
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentScrollY = window.scrollY;
+          if (currentScrollY < lastScrollYRef.current || currentScrollY < 10) {
+            setIsNavVisible(true);
+          } else if (currentScrollY > lastScrollYRef.current && currentScrollY > 80) {
+            setIsNavVisible(false);
+            setIsMenuOpen(false);
+          }
+          lastScrollYRef.current = currentScrollY;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
-  const diff = today - surgeryDate;
+  const calculateRecoveryDay = (date) => {
+    if (!date) return 0;
+    const surgeryDate = new Date(date);
+    const today = new Date();
+    const diff = today - surgeryDate;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    return Math.max(days, 0); 
+  };
 
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const calculateRecoveryProgress = (date, totalDays = 90) => {
+    const day = calculateRecoveryDay(date);
+    return Math.min(Math.round((day / totalDays) * 100), 100);
+  };
 
-  return Math.max(days, 0); // prevents negative days
-};
+  const recoveryData = {
+    patientName: profile?.patient_name || "",
+    surgeryType: profile?.surgery_type || "",
+    recoveryDay: calculateRecoveryDay(profile?.surgery_date),
+    totalDays: profile?.recovery_days_total || 90,
+    progress: calculateRecoveryProgress(
+      profile?.surgery_date,
+      profile?.recovery_days_total || 90
+    )
+  };
 
-const calculateRecoveryProgress = (date, totalDays = 90) => {
+  const toggleTaskStatus = async (taskId) => {
+    try {
+      const taskToUpdate = tasks.find(t => t.id === taskId);
+      if (!taskToUpdate || taskToUpdate.status === "completed") return;
 
-  const day = calculateRecoveryDay(date);
+      await axios.patch(`${API_BASE}/api/task/${taskId}`, {}, getAuthHeaders());
+      
+      setTasks(tasks.map(task =>
+        task.id === taskId ? { ...task, status: "completed" } : task
+      ));
 
-  return Math.min(Math.round((day / totalDays) * 100), 100);
-};
-const recoveryData = {
-  patientName: profile?.patient_name || "",
-  surgeryType: profile?.surgery_type || "",
-  recoveryDay: calculateRecoveryDay(profile?.surgery_date),
-  totalDays: profile?.recovery_days_total || 90,
-  progress: calculateRecoveryProgress(
-  profile?.surgery_date,
-  profile?.recovery_days_total || 90
-)
-};
+      // --- SUPER INVENTORY SYNC LOGIC ---
+      if (taskToUpdate.title.toLowerCase().includes("medication")) {
+        // Find the medicine name from the task (Supports "-" or ":")
+        const separator = taskToUpdate.title.includes("-") ? "-" : ":";
+        const medNameFromTask = taskToUpdate.title.split(separator)[1]?.trim().toLowerCase();
+        
+        console.log(`Task clicked: ${taskToUpdate.title}. Searching inventory for:`, medNameFromTask);
 
-const toggleTaskStatus = async (taskId) => {
+        if (medNameFromTask) {
+          let activeMeds = JSON.parse(localStorage.getItem('surgisense_active_meds')) || [];
+          let wasUpdated = false;
+          
+          activeMeds = activeMeds.map(med => {
+            const name = (med.name || med.medication_name || "").toLowerCase();
+            
+            // FUZZY MATCH: "amoxicillin 500mg" will now successfully match "amoxicillin"
+            if (name.includes(medNameFromTask) || medNameFromTask.includes(name)) {
+              console.log(`✅ Found match in inventory: ${med.name || med.medication_name}`);
+              wasUpdated = true;
+              
+              // Check if they have set up inventory for this med on the Pharmacy page
+              if (med.currentQuantity !== undefined && med.currentQuantity !== null) {
+                const dose = med.doseAmount ? Number(med.doseAmount) : 1;
+                const remaining = Math.max(0, med.currentQuantity - dose);
+                
+                console.log(`💊 Deducting ${dose} dose. Remaining: ${remaining}`);
+                return { 
+                  ...med, 
+                  currentQuantity: remaining,
+                  dosesTaken: (med.dosesTaken || 0) + 1    
+                };
+              } else {
+                console.log("⚠️ Inventory not set up for this med yet. Go to Pharmacy page to Track it first.");
+              }
+            }
+            return med;
+          });
+          
+          if (wasUpdated) {
+            localStorage.setItem('surgisense_active_meds', JSON.stringify(activeMeds));
+          } else {
+            console.log("❌ Could not find a matching medication in local storage for this task.");
+          }
+        }
+      }
 
-  try {
-
-    await axios.patch(
-      `${API_BASE}/api/task/${taskId}`,
-      {},
-      getAuthHeaders()
-    );
-
-    setTasks(tasks.map(task =>
-      task.id === taskId
-        ? { ...task, status: "completed" }
-        : task
-    ));
-
-  } catch (err) {
-
-    console.error("Failed to update task");
-
-  }
-
-};
+    } catch (err) {
+      console.error("Failed to update task", err);
+    }
+  };
 
   const handleDischargeUpload = async (file) => {
     if (!file) return;
@@ -251,20 +252,23 @@ const toggleTaskStatus = async (taskId) => {
     formData.append("file", file);
     try {
       setLoadingRecord(true);
-      const res = await axios.post(
-      `${API_BASE}/api/digitize-record`,
-      formData,
-      getAuthHeaders()
-      );
+      const res = await axios.post(`${API_BASE}/api/digitize-record`, formData, getAuthHeaders());
       const extractedData = res.data.data;
+      
+      console.log("=== DIGITIZATION RESPONSE ===");
+      console.log("Full response:", res.data);
+      console.log("Extracted Data:", extractedData);
+      console.log("Medications in extracted data:", extractedData?.medications);
+      
       setDigitizedData(extractedData);
-      const medsArray = extractedData?.medication_list || extractedData?.medications || [];
-      localStorage.setItem('surgisense_active_meds', JSON.stringify(medsArray));
+      
+      // TRIGGER THE MODAL POPUP INSTEAD OF SAVING DIRECTLY
+      setPendingMedsData(extractedData);
+      
       try {
         const tasksRes = await axios.post(`${API_BASE}/api/generate-tasks`, {
           document_text: JSON.stringify(extractedData)
-        }
-        , getAuthHeaders());
+        }, getAuthHeaders());
         if (tasksRes.data.status === 'success' && tasksRes.data.tasks.length > 0) {
           setTasks(tasksRes.data.tasks);
         }
@@ -287,33 +291,57 @@ const toggleTaskStatus = async (taskId) => {
       ]
     : [];
 
-  const activeMedications = digitizedData?.medication_list || digitizedData?.medications || [];
+  const completedTasks = tasks.filter(t => t.status === 'completed').length;
+  const totalTasks = tasks.filter(t => t.id !== 'placeholder').length;
 
-const completedTasks = tasks.filter(t => t.status === 'completed').length;
-const totalTasks = tasks.filter(t => t.id !== 'placeholder').length;
+  // Real-time active medications from local storage or fallback to AI data
+  const savedMedsRaw = localStorage.getItem('surgisense_active_meds');
+  const activeMedications = savedMedsRaw 
+    ? JSON.parse(savedMedsRaw) 
+    : (digitizedData?.medication_list || digitizedData?.medications || []);
 
-// Redirect if profile missing
-useEffect(() => {
+  useEffect(() => {
+    if (profile && profile.profile_exists === false) {
+      navigate("/setup-profile");
+    }
+  }, [profile]);
 
-  if (profile && profile.profile_exists === false) {
-    navigate("/setup-profile")
+  if (!profile) {
+    return <div>Loading patient data...</div>;
   }
 
-}, [profile])
-
-// Loading state
-if (!profile) {
-  return <div>Loading patient data...</div>
-}
   return (
     <div className="min-h-screen bg-linear-to-b from-[#D3D0BC] to-[#D3D0BC]/90">
+      
+      {/* POP-UP OVERLAY FOR MEDICATION SELECTOR */}
+      <AnimatePresence>
+        {pendingMedsData && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-100 flex items-center justify-center bg-[#3E435D]/60 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="w-full max-w-md"
+            >
+              <MedicationSelector 
+                extractedData={pendingMedsData} 
+                onComplete={() => {
+                  setPendingMedsData(null); // Hide the popup
+                  navigate("/pharmacy"); // Automatically send them to the pharmacy page
+                }} 
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* NAVBAR */}
-      <header
-        ref={headerRef}
-        className={`fixed top-0 left-0 right-0 z-50 bg-[#3E435D]/95 backdrop-blur-md border-b border-white/5 transition-all duration-300 ${
-          isNavVisible ? "translate-y-0" : "-translate-y-full"
-        }`}
-      >
+      <header ref={headerRef} className={`fixed top-0 left-0 right-0 z-50 bg-[#3E435D]/95 backdrop-blur-md border-b border-white/5 transition-all duration-300 ${isNavVisible ? "translate-y-0" : "-translate-y-full"}`}>
         <div className="max-w-7xl mx-auto px-5 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -327,30 +355,20 @@ if (!profile) {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Desktop nav */}
               <div className="hidden md:flex items-center gap-1">
                 <Link to="/dashboard" className="px-3 py-1.5 rounded-lg text-[#CBC3A5] text-sm font-medium bg-[#CBC3A5]/10">Home</Link>
                 <Link to="/chat" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Chat</Link>
                 <Link to="/surgery-readiness" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Readiness</Link>
                 <Link to="/pharmacy" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Pharmacy</Link>
-                <button
-                  onClick={handleLogout}
-                  className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors flex items-center gap-2"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Logout
+                <button onClick={handleLogout} className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors flex items-center gap-2">
+                  <LogOut className="w-4 h-4" /> Logout
                 </button>
               </div>
-              <button
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="md:hidden text-[#D3D0BC] hover:bg-white/10 p-2 rounded-lg transition-colors"
-              >
+              <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden text-[#D3D0BC] hover:bg-white/10 p-2 rounded-lg transition-colors">
                 {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
           </div>
-
-          {/* Progress bar in header */}
           <div className="mt-3 flex items-center gap-3">
             <Progress value={recoveryData.progress} className="h-1.5 bg-white/10 flex-1" />
             <span className="text-[#CBC3A5] text-xs font-medium whitespace-nowrap">{recoveryData.progress}%</span>
@@ -361,13 +379,7 @@ if (!profile) {
       {/* Mobile menu */}
       <AnimatePresence>
         {isMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="fixed left-0 right-0 bg-[#3E435D]/95 backdrop-blur-md z-40 border-b border-white/5 md:hidden"
-            style={{ top: headerRef.current ? headerRef.current.offsetHeight + 'px' : '80px' }}
-          >
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="fixed left-0 right-0 bg-[#3E435D]/95 backdrop-blur-md z-40 border-b border-white/5 md:hidden" style={{ top: headerRef.current ? headerRef.current.offsetHeight + 'px' : '80px' }}>
             <div className="px-5 py-3 space-y-1">
               {[
                 { to: "/dashboard", icon: Home, label: "Dashboard" },
@@ -375,20 +387,12 @@ if (!profile) {
                 { to: "/surgery-readiness", icon: ShieldCheck, label: "Readiness" },
                 { to: "/pharmacy", icon: Pill, label: "Pharmacy" },
               ].map(item => (
-                <Link key={item.to} to={item.to} onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors"
-                >
+                <Link key={item.to} to={item.to} onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors">
                   <item.icon className="w-5 h-5 text-[#CBC3A5]" />
                   <span className="text-[#D3D0BC] text-sm font-medium">{item.label}</span>
                 </Link>
               ))}
-              <button
-                onClick={() => {
-                  handleLogout();
-                  setIsMenuOpen(false);
-                }}
-                className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors w-full"
-              >
+              <button onClick={() => { handleLogout(); setIsMenuOpen(false); }} className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors w-full">
                 <LogOut className="w-5 h-5 text-[#CBC3A5]" />
                 <span className="text-[#D3D0BC] text-sm font-medium">Logout</span>
               </button>
@@ -399,6 +403,7 @@ if (!profile) {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-5 pt-28 pb-24 space-y-6">
+        
         {/* Quick Actions */}
         <motion.div initial="hidden" animate="visible" variants={fadeIn} className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
@@ -410,9 +415,7 @@ if (!profile) {
             const Wrapper = item.to ? Link : 'a';
             const wrapperProps = item.to ? { to: item.to } : { href: item.href };
             return (
-              <Wrapper key={item.label} {...wrapperProps}
-                className="group bg-white/80 backdrop-blur-sm rounded-2xl p-4 flex flex-col items-center gap-2.5 border border-[#3E435D]/5 hover:bg-white hover:shadow-lg hover:shadow-[#3E435D]/5 transition-all duration-300 hover:-translate-y-0.5"
-              >
+              <Wrapper key={item.label} {...wrapperProps} className="group bg-white/80 backdrop-blur-sm rounded-2xl p-4 flex flex-col items-center gap-2.5 border border-[#3E435D]/5 hover:bg-white hover:shadow-lg hover:shadow-[#3E435D]/5 transition-all duration-300 hover:-translate-y-0.5">
                 <div className={`${item.color} w-11 h-11 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform`}>
                   <item.icon className="w-5 h-5 text-[#CBC3A5]" />
                 </div>
@@ -423,74 +426,30 @@ if (!profile) {
         </motion.div>
 
         {/* Recovery Timeline */}
-<motion.section
-  id="timeline"
-  className="scroll-mt-28"
-  initial="hidden"
-  animate="visible"
-  variants={fadeIn}
->
-  <div className="flex items-center justify-between mb-4">
-    <h2 className="text-[#3E435D] text-xl font-bold tracking-tight">
-      Today's Recovery Tasks
-    </h2>
-
-    {totalTasks > 0 && (
-      <span className="text-[#9AA7B1] text-sm font-medium">
-        {completedTasks}/{totalTasks} done
-      </span>
-    )}
-  </div>
-
-  <div className="space-y-2.5">
-    {tasks.map((task) => (
-      <div
-        key={task.id}
-        onClick={() => toggleTaskStatus(task.id)}
-        className={`group bg-white/80 backdrop-blur-sm rounded-xl p-4 border-l-[3px] cursor-pointer transition-all duration-200 hover:bg-white hover:shadow-md ${
-          task.status === "completed"
-            ? "border-[#9AA7B1] opacity-70"
-            : "border-[#CBC3A5]"
-        }`}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            {task.status === "completed" ? (
-              <CheckCircle className="w-5 h-5 text-[#9AA7B1]" />
-            ) : (
-              <Clock className="w-5 h-5 text-[#CBC3A5]" />
-            )}
-
-            <div>
-              <h3
-                className={`font-medium text-sm ${
-                  task.status === "completed"
-                    ? "text-[#9AA7B1] line-through"
-                    : "text-[#3E435D]"
-                }`}
-              >
-                {task.title}
-              </h3>
-
-              <p className="text-[#9AA7B1] text-xs">{task.time}</p>
-            </div>
+        <motion.section id="timeline" className="scroll-mt-28" initial="hidden" animate="visible" variants={fadeIn}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-[#3E435D] text-xl font-bold tracking-tight">Today's Recovery Tasks</h2>
+            {totalTasks > 0 && <span className="text-[#9AA7B1] text-sm font-medium">{completedTasks}/{totalTasks} done</span>}
           </div>
-
-          <span
-            className={`px-3 py-1 rounded-lg text-xs font-medium ${
-              task.status === "completed"
-                ? "bg-[#9AA7B1]/15 text-[#9AA7B1]"
-                : "bg-[#CBC3A5]/20 text-[#3E435D]"
-            }`}
-          >
-            {task.status === "completed" ? "Done" : "Pending"}
-          </span>
-        </div>
-      </div>
-    ))}
-  </div>
-</motion.section>
-         
+          <div className="space-y-2.5">
+            {tasks.map((task) => (
+              <div key={task.id} onClick={() => toggleTaskStatus(task.id)} className={`group bg-white/80 backdrop-blur-sm rounded-xl p-4 border-l-[3px] cursor-pointer transition-all duration-200 hover:bg-white hover:shadow-md ${task.status === "completed" ? "border-[#9AA7B1] opacity-70" : "border-[#CBC3A5]"}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {task.status === "completed" ? <CheckCircle className="w-5 h-5 text-[#9AA7B1]" /> : <Clock className="w-5 h-5 text-[#CBC3A5]" />}
+                    <div>
+                      <h3 className={`font-medium text-sm ${task.status === "completed" ? "text-[#9AA7B1] line-through" : "text-[#3E435D]"}`}>{task.title}</h3>
+                      <p className="text-[#9AA7B1] text-xs">{task.time}</p>
+                    </div>
+                  </div>
+                  <span className={`px-3 py-1 rounded-lg text-xs font-medium ${task.status === "completed" ? "bg-[#9AA7B1]/15 text-[#9AA7B1]" : "bg-[#CBC3A5]/20 text-[#3E435D]"}`}>
+                    {task.status === "completed" ? "Done" : "Pending"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.section>
 
         {/* Discharge Summary Card */}
         <section className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-[#3E435D]/5">
@@ -507,11 +466,7 @@ if (!profile) {
               <p className="text-[#9AA7B1] text-xs mb-4">PDF format supported</p>
               <input type="file" accept="application/pdf" className="hidden" id="discharge-upload" onChange={(e) => handleDischargeUpload(e.target.files[0])} />
               <label htmlFor="discharge-upload" className="inline-flex items-center gap-2 bg-[#3E435D] text-[#D3D0BC] px-5 py-2.5 rounded-xl cursor-pointer hover:bg-[#4a5070] transition-colors text-sm font-semibold shadow-md shadow-[#3E435D]/15">
-                {loadingRecord ? (
-                  <><span className="w-4 h-4 border-2 border-[#D3D0BC]/30 border-t-[#D3D0BC] rounded-full animate-spin" /> Processing...</>
-                ) : (
-                  <><Upload className="w-4 h-4" /> Upload & Digitize</>
-                )}
+                {loadingRecord ? <><span className="w-4 h-4 border-2 border-[#D3D0BC]/30 border-t-[#D3D0BC] rounded-full animate-spin" /> Processing...</> : <><Upload className="w-4 h-4" /> Upload & Digitize</>}
               </label>
             </div>
           ) : (
@@ -526,7 +481,7 @@ if (!profile) {
           )}
         </section>
 
-        {/* Wound Check & Results - Side by side on desktop */}
+        {/* Wound Check & Results */}
         <div className="grid lg:grid-cols-2 gap-5">
           <section id="wound" className="scroll-mt-28">
             <Vision onAnalysisComplete={handleWoundAnalysis} />
@@ -542,7 +497,6 @@ if (!profile) {
                   <p className="text-[11px] text-[#9AA7B1]">AI-powered clinical assessment</p>
                 </div>
               </div>
-
               {!woundAnalysis ? (
                 <div className="border-2 border-dashed border-[#CBC3A5]/40 rounded-xl p-4 flex-1 flex flex-col items-center justify-center min-h-32 bg-[#D3D0BC]/10">
                   <Camera size={24} className="text-[#9AA7B1] opacity-60 mb-1.5" />
@@ -560,16 +514,10 @@ if (!profile) {
                         <span className={`font-extrabold text-base ${woundSeverity.textColor}`}>{woundSeverity.score}/10</span>
                       </div>
                       <div className="w-full bg-[#D3D0BC]/50 rounded-full h-2 overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${(woundSeverity.score / 10) * 100}%` }}
-                          transition={{ duration: 1, ease: "easeOut" }}
-                          className={`h-2 rounded-full ${woundSeverity.barColor}`}
-                        />
+                        <motion.div initial={{ width: 0 }} animate={{ width: `${(woundSeverity.score / 10) * 100}%` }} transition={{ duration: 1, ease: "easeOut" }} className={`h-2 rounded-full ${woundSeverity.barColor}`} />
                       </div>
                     </div>
                   )}
-
                   <div className="bg-[#D3D0BC]/10 p-3.5 rounded-xl border border-[#3E435D]/5 flex-1">
                     <h4 className="text-[10px] font-bold text-[#9AA7B1] uppercase tracking-wider mb-2">AI Assessment</h4>
                     <div className="text-xs text-[#3E435D] leading-relaxed overflow-y-auto max-h-48 pr-1.5 prose prose-sm prose-headings:text-[#3E435D]">
@@ -644,11 +592,7 @@ if (!profile) {
             const Wrapper = item.to ? Link : 'a';
             const wrapperProps = item.to ? { to: item.to } : { href: item.href };
             return (
-              <Wrapper key={item.label} {...wrapperProps}
-                className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition-colors ${
-                  item.active ? 'text-[#3E435D]' : 'text-[#9AA7B1] hover:text-[#3E435D]'
-                }`}
-              >
+              <Wrapper key={item.label} {...wrapperProps} className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition-colors ${item.active ? 'text-[#3E435D]' : 'text-[#9AA7B1] hover:text-[#3E435D]'}`}>
                 <item.icon className="w-5 h-5" />
                 <span className="text-[10px] font-semibold">{item.label}</span>
               </Wrapper>
