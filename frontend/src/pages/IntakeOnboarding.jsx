@@ -18,6 +18,7 @@ const EMPTY_FORM = {
   surgery_phase: "post", surgery_date: "", icd10_code: "", cpt_code: "",
   payer_id: "", bp_sys: "", bp_dia: "", heart_rate: "", spo2: "",
   temperature: "", hemoglobin: "", blood_sugar: "", notes: "",
+  next_appointment_date: "",
 }
 
 export default function IntakeOnboarding() {
@@ -376,6 +377,9 @@ export default function IntakeOnboarding() {
                 </select>
               </div>
               <div>{lbl("Surgery date", true)}{inp("surgery_date","","date")}</div>
+              {form.surgery_phase === "post" && (
+                <div>{lbl("Next appointment date")}{inp("next_appointment_date","","date")}</div>
+              )}
               <div>{lbl("Payer / Insurance ID")}{inp("payer_id","e.g. PAYER-001")}</div>
             </div>
 

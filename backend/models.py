@@ -52,6 +52,10 @@ class PatientProfile(Base):
     payer_id      = Column(String,   nullable=True)
 
     recovery_days_total = Column(Integer, default=90)
+    
+    # Dates for task scheduling ranges
+    pdf_upload_date      = Column(String, nullable=True)  # YYYY-MM-DD: when PDF was uploaded
+    next_appointment_date = Column(String, nullable=True)  # YYYY-MM-DD: next appointment (post-op)
 
     user = relationship("User", back_populates="profile")
 

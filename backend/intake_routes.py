@@ -54,6 +54,7 @@ class IntakeSubmission(BaseModel):
     blood_sugar:    str = ""
     notes:          str = ""
     wound_analysis: str = ""
+    next_appointment_date: str = ""  # YYYY-MM-DD: for post-op task scheduling
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -121,11 +122,16 @@ async def submit_intake(
         # Also update the existing PatientProfile for backward compatibility
         # with Dashboard, RAG chatbot, and task generation
         from models import PatientProfile
+        from datetime import date as date_type
+        
+        today_str = date_type.today().isoformat()
         profile = db.query(PatientProfile).filter(PatientProfile.user_id == user.id).first()
         if profile:
             profile.patient_name  = payload.patient_name
             profile.surgery_type  = payload.surgery_type
             profile.surgery_date  = payload.surgery_date
+            profile.pdf_upload_date = today_str  # Record when PDF was uploaded
+            profile.next_appointment_date = payload.next_appointment_date or None
         else:
             profile = PatientProfile(
                 user_id=user.id,
@@ -133,6 +139,8 @@ async def submit_intake(
                 surgery_type=payload.surgery_type,
                 surgery_date=payload.surgery_date,
                 recovery_days_total=90,
+                pdf_upload_date=today_str,
+                next_appointment_date=payload.next_appointment_date or None,
             )
             db.add(profile)
 
@@ -181,17 +189,42 @@ Patient intake data:
 
             if template:
                 today = date_type.today()
-                end_date = today + timedelta(days=14)
+                
+                # Determine date range based on phase
+                surgery_date = None
+                if payload.surgery_date:
+                    try:
+                        surgery_date = date_type.fromisoformat(payload.surgery_date)
+                    except Exception:
+                        pass
+                
+                phase = payload.surgery_phase or "post"
+                
+                if phase == "pre" and surgery_date:
+                    # Pre-op: from today (PDF upload date) until surgery date
+                    start_date = today
+                    end_date = surgery_date
+                else:
+                    # Post-op: from today until next appointment or 14 days
+                    start_date = today
+                    if payload.next_appointment_date:
+                        try:
+                            end_date = date_type.fromisoformat(payload.next_appointment_date)
+                        except Exception:
+                            end_date = today + timedelta(days=14)
+                    else:
+                        end_date = today + timedelta(days=14)
 
-                # Wipe any existing future tasks first
+                # Wipe any existing tasks in the date range
                 db.query(RecoveryTask).filter(
                     RecoveryTask.user_id == user.id,
-                    RecoveryTask.task_date >= today.isoformat()
+                    RecoveryTask.task_date >= start_date.isoformat(),
+                    RecoveryTask.task_date <= end_date.isoformat()
                 ).delete(synchronize_session=False)
 
-                # Stamp template onto every day for the next 14 days
-                for day_offset in range((end_date - today).days + 1):
-                    day_str = (today + timedelta(days=day_offset)).isoformat()
+                # Stamp template onto every day in the range
+                for day_offset in range((end_date - start_date).days + 1):
+                    day_str = (start_date + timedelta(days=day_offset)).isoformat()
                     for task in template:
                         db.add(RecoveryTask(
                             user_id=user.id,
@@ -433,6 +466,7 @@ async def update_intake(
         profile.icd10_code    = payload.icd10_code
         profile.cpt_code      = payload.cpt_code
         profile.payer_id      = payload.payer_id
+        profile.next_appointment_date = payload.next_appointment_date or None
         if payload.age and str(payload.age).isdigit():
             profile.age = int(payload.age)
     else:
@@ -442,6 +476,7 @@ async def update_intake(
             surgery_type=payload.surgery_type,
             surgery_date=payload.surgery_date,
             recovery_days_total=90,
+            next_appointment_date=payload.next_appointment_date or None,
         )
         db.add(profile)
 
@@ -485,13 +520,42 @@ Patient intake data:
 
         if template:
             today = date_type.today()
-            end_date = today + timedelta(days=14)
+            
+            # Determine date range based on phase
+            surgery_date = None
+            if payload.surgery_date:
+                try:
+                    surgery_date = date_type.fromisoformat(payload.surgery_date)
+                except Exception:
+                    pass
+            
+            phase = payload.surgery_phase or "post"
+            
+            if phase == "pre" and surgery_date:
+                # Pre-op: from PDF upload date (now = today) until surgery date
+                start_date = today
+                end_date = surgery_date
+            else:
+                # Post-op: from today until next appointment or 14 days
+                start_date = today
+                if payload.next_appointment_date:
+                    try:
+                        end_date = date_type.fromisoformat(payload.next_appointment_date)
+                    except Exception:
+                        end_date = today + timedelta(days=14)
+                else:
+                    end_date = today + timedelta(days=14)
+            
+            # Delete existing tasks in the date range
             db.query(RecoveryTask).filter(
                 RecoveryTask.user_id == user.id,
-                RecoveryTask.task_date >= today.isoformat()
+                RecoveryTask.task_date >= start_date.isoformat(),
+                RecoveryTask.task_date <= end_date.isoformat()
             ).delete(synchronize_session=False)
-            for day_offset in range((end_date - today).days + 1):
-                day_str = (today + timedelta(days=day_offset)).isoformat()
+            
+            # Generate tasks for each day in the range
+            for day_offset in range((end_date - start_date).days + 1):
+                day_str = (start_date + timedelta(days=day_offset)).isoformat()
                 for task in template:
                     db.add(RecoveryTask(
                         user_id=user.id,
