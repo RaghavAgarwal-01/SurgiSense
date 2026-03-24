@@ -29,6 +29,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 // IMPORT YOUR NEW COMPONENT HERE
 import MedicationSelector from "../components/ui/medication_selector";
+import AgentReportCard from "../components/ui/AgentReportCard";
 
 const API_BASE = "http://localhost:8000";
 const getAuthHeaders = () => {
@@ -380,7 +381,82 @@ export default function Dashboard() {
   }, [profile]);
 
   if (!profile) {
-    return <div>Loading patient data...</div>;
+    return (
+      <div className="min-h-screen bg-[#D3D0BC] flex flex-col">
+        {/* Skeleton navbar */}
+        <div className="bg-[#3E435D] px-5 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-[#CBC3A5]/30 rounded-xl animate-pulse" />
+            <div className="space-y-1.5">
+              <div className="w-32 h-3.5 bg-[#CBC3A5]/30 rounded-full animate-pulse" />
+              <div className="w-20 h-2.5 bg-[#CBC3A5]/20 rounded-full animate-pulse" />
+            </div>
+          </div>
+          <div className="hidden md:flex gap-2">
+            {[60, 40, 64, 52].map((w, i) => (
+              <div key={i} className="h-7 rounded-lg bg-[#CBC3A5]/20 animate-pulse" style={{ width: w }} />
+            ))}
+          </div>
+        </div>
+
+        {/* Centered pulse logo + message */}
+        <div className="flex-1 flex flex-col items-center justify-center gap-6">
+          {/* Animated heart logo */}
+          <div className="relative flex items-center justify-center">
+            {/* Outer ring pulse */}
+            <div className="absolute w-24 h-24 rounded-full bg-[#3E435D]/10 animate-ping" style={{ animationDuration: '1.8s' }} />
+            <div className="absolute w-16 h-16 rounded-full bg-[#3E435D]/15 animate-ping" style={{ animationDuration: '1.8s', animationDelay: '0.3s' }} />
+            {/* Core icon */}
+            <div className="relative w-14 h-14 bg-[#3E435D] rounded-2xl flex items-center justify-center shadow-lg shadow-[#3E435D]/25">
+              <svg className="w-7 h-7 text-[#CBC3A5]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z"/>
+              </svg>
+            </div>
+          </div>
+
+          {/* Text */}
+          <div className="text-center space-y-1.5">
+            <p className="text-[#3E435D] font-semibold text-base tracking-tight">SurgiSense</p>
+            <p className="text-[#9AA7B1] text-sm">Loading your recovery dashboard…</p>
+          </div>
+
+          {/* Animated progress dots */}
+          <div className="flex gap-1.5">
+            {[0, 1, 2].map(i => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-[#3E435D]/40 animate-bounce"
+                style={{ animationDelay: `${i * 0.18}s`, animationDuration: '0.9s' }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Skeleton content preview */}
+        <div className="px-5 pb-8 space-y-3 max-w-2xl mx-auto w-full">
+          {/* Quick actions skeleton */}
+          <div className="grid grid-cols-4 gap-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-white/50 rounded-2xl p-4 flex flex-col items-center gap-2 animate-pulse">
+                <div className="w-10 h-10 rounded-xl bg-[#3E435D]/10" />
+                <div className="w-12 h-2.5 rounded-full bg-[#3E435D]/10" />
+              </div>
+            ))}
+          </div>
+          {/* Task list skeleton */}
+          <div className="bg-white/50 rounded-2xl p-5 space-y-3 animate-pulse">
+            <div className="w-36 h-4 rounded-full bg-[#3E435D]/15" />
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 py-1">
+                <div className="w-5 h-5 rounded-full bg-[#CBC3A5]/40 shrink-0" />
+                <div className="flex-1 h-3 rounded-full bg-[#CBC3A5]/40" style={{ width: `${70 - i * 10}%` }} />
+                <div className="w-14 h-3 rounded-full bg-[#CBC3A5]/30" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -496,6 +572,11 @@ export default function Dashboard() {
               </Wrapper>
             );
           })}
+        </motion.div>
+
+        {/* AI Agent Workflow Report */}
+        <motion.div initial="hidden" animate="visible" variants={fadeIn}>
+          <AgentReportCard />
         </motion.div>
 
         {/* Recovery Tasks */}
