@@ -14,7 +14,9 @@ from groq import Groq
 from sqlalchemy.orm import Session
 from dependencies import get_current_user, get_db
 from models import MedicalRecord, User, PatientProfile, RecoveryTask, DischargeSummary, Medicine, MedicationLog, AdherenceLog, AgentAlert
-from services.medication_agent import execute_medication_completion, check_inventory_alerts
+from services.medication_agent import execute_medication_completion, check_inventory_alerts, get_adherence_stats
+from services.scheduler import start_scheduler, stop_scheduler
+from services.agent_router import route_event
 from services.rules_ai import evaluate_patient
 from services.record_digitization import digitize_discharge_summary
 from services.speech_to_text import SpeechToTextService
@@ -944,6 +946,50 @@ def get_inventory_alerts(
     return check_inventory_alerts(user.id, db)
 
 
+@app.get("/api/agent/adherence-stats")
+def get_adherence_report(
+    days: int = 7,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Compliance Agent — returns adherence analytics for the last N days.
+    Includes overall %, per-med breakdown, streak, most-missed slot, daily chart data.
+    """
+    days = max(1, min(days, 90))  # clamp to 1-90
+    return get_adherence_stats(user.id, days, db)
+
+
+# ── PHASE 5: AGENT ROUTER (UNIFIED ORCHESTRATOR) ────────────────────────────
+
+class AgentEventRequest(BaseModel):
+    event: str
+    payload: dict = {}
+
+@app.post("/api/agent/event")
+def agent_event(
+    req: AgentEventRequest,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Unified event-driven entry point for the agent system.
+
+    Accepts any supported event and routes it to the correct agent:
+      - task_completed   → medication completion pipeline
+      - inventory_changed → inventory intelligence scan
+      - daily_summary    → compliance analytics report
+      - time_tick        → scheduler overdue check
+
+    Example payload:
+      { "event": "task_completed", "payload": { "task_id": 42 } }
+    """
+    result = route_event(req.event, req.payload, user.id, db)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=400, detail=result.get("message", "Agent error"))
+    return result
+
+
 def calculate_distance(lon1, lat1, lon2, lat2):
     lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
     dlon = lon2 - lon1
@@ -1058,6 +1104,20 @@ def search_medicine_prices(medicine: str):
     except Exception as e:
         logger.error(f"Procurement Agent Error: {e}")
         return {"status": "error", "message": "Could not fetch live prices."}
+
+@app.on_event("startup")
+def on_startup():
+    """Launch the scheduler agent in a background thread on app startup."""
+    logger.info("Starting scheduler agent...")
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    """Gracefully stop the scheduler agent."""
+    logger.info("Stopping scheduler agent...")
+    stop_scheduler()
+
 
 if __name__ == "__main__":
     import uvicorn
