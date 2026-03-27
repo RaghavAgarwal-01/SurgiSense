@@ -21,6 +21,7 @@ class User(Base):
     records  = relationship("MedicalRecord", back_populates="owner")
     profile  = relationship("PatientProfile", back_populates="user", uselist=False)
     intakes  = relationship("IntakeRecord", back_populates="user")
+    discharge_summaries = relationship("DischargeSummary", back_populates="user")
 
 
 class MedicalRecord(Base):
@@ -84,3 +85,78 @@ class IntakeRecord(Base):
     created_at  = Column(String)
 
     user = relationship("User", back_populates="intakes")
+
+
+class DischargeSummary(Base):
+    """
+    Stores the full structured extraction from /api/scan.
+    One row per PDF scan — holds all patient, surgery, and vitals fields.
+    """
+    __tablename__ = "discharge_summaries"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    user_id        = Column(Integer, ForeignKey("users.id"))
+
+    patient_name   = Column(String,  nullable=True)
+    age            = Column(Integer, nullable=True)
+    gender         = Column(String,  nullable=True)
+    surgery_type   = Column(String,  nullable=True)
+    surgery_date   = Column(String,  nullable=True)
+    surgery_phase  = Column(String,  nullable=True, default="post")
+    icd10_code     = Column(String,  nullable=True)
+    cpt_code       = Column(String,  nullable=True)
+
+    # Vitals
+    bp_sys         = Column(Integer, nullable=True)
+    bp_dia         = Column(Integer, nullable=True)
+    heart_rate     = Column(Integer, nullable=True)
+    spo2           = Column(Integer, nullable=True)
+    temperature    = Column(String,  nullable=True)
+    hemoglobin     = Column(String,  nullable=True)
+    blood_sugar    = Column(Integer, nullable=True)
+
+    created_at     = Column(String,  nullable=True)
+
+    user      = relationship("User", back_populates="discharge_summaries")
+    medicines = relationship("Medicine", back_populates="summary")
+
+
+class Medicine(Base):
+    """
+    Individual medication row extracted from a discharge summary.
+    Tracks inventory: total_quantity, current_quantity, dose_amount.
+    """
+    __tablename__ = "medicines"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    summary_id       = Column(Integer, ForeignKey("discharge_summaries.id"))
+    user_id          = Column(Integer, ForeignKey("users.id"))
+
+    name             = Column(String,  nullable=False)
+    dosage           = Column(String,  nullable=True)
+    frequency        = Column(String,  nullable=True)
+
+    total_quantity   = Column(Integer, nullable=True)
+    current_quantity = Column(Integer, nullable=True)
+    dose_amount      = Column(Integer, nullable=True, default=1)
+
+    summary = relationship("DischargeSummary", back_populates="medicines")
+    logs    = relationship("MedicationLog", back_populates="medicine")
+
+
+class MedicationLog(Base):
+    """
+    Audit trail for every dose deduction or inventory change.
+    """
+    __tablename__ = "medication_logs"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    medicine_id     = Column(Integer, ForeignKey("medicines.id"))
+    user_id         = Column(Integer, ForeignKey("users.id"))
+
+    action          = Column(String,  nullable=False)   # "deducted", "restocked", etc.
+    quantity_change = Column(Integer, nullable=False)
+    remaining       = Column(Integer, nullable=False)
+    timestamp       = Column(String,  nullable=False)
+
+    medicine = relationship("Medicine", back_populates="logs")
