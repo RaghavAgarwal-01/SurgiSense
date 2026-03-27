@@ -1,12 +1,4 @@
-// src/pages/IntakeOnboarding.jsx
-// Post-login intake page with persistent pre-fill:
-//  • On mount: calls GET /api/my-intake to load any previously saved data
-//  • Shows a banner if data was found (returning user)
-//  • User can edit any field and click "Save N changes" (PATCH) or
-//    re-upload a PDF to overwrite everything (POST full submit)
-//  • First-time user sees the plain empty form as before
-
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import axios from "axios"
 import { useNavigate } from "react-router-dom"
 
@@ -31,28 +23,29 @@ export default function IntakeOnboarding() {
   const [savedWoundAnalysis, setSavedWoundAnalysis] = useState("")
 
   // ── form state ────────────────────────────────────────────────────────────
-  const [form, setForm]             = useState(EMPTY_FORM)
+  const [form, setForm] = useState(EMPTY_FORM)
   const [missingFields, setMissingFields] = useState([])
-  const [dirtyFields, setDirtyFields]     = useState(new Set())
+  const [dirtyFields, setDirtyFields] = useState(new Set())
+  const [medications, setMedications] = useState([]) 
 
   // ── PDF extraction ────────────────────────────────────────────────────────
-  const [pdfFile, setPdfFile]           = useState(null)
-  const [extracting, setExtracting]     = useState(false)
-  const [extractDone, setExtractDone]   = useState(false)
+  const [pdfFile, setPdfFile] = useState(null)
+  const [extracting, setExtracting] = useState(false)
+  const [extractDone, setExtractDone] = useState(false)
   const [extractError, setExtractError] = useState("")
 
   // ── wound state ───────────────────────────────────────────────────────────
-  const [offerWound, setOfferWound]         = useState(false)
-  const [woundFile, setWoundFile]           = useState(null)
-  const [woundPreview, setWoundPreview]     = useState(null)
-  const [woundAnalysis, setWoundAnalysis]   = useState("")
+  const [offerWound, setOfferWound] = useState(false)
+  const [woundFile, setWoundFile] = useState(null)
+  const [woundPreview, setWoundPreview] = useState(null)
+  const [woundAnalysis, setWoundAnalysis] = useState("")
   const [analyzingWound, setAnalyzingWound] = useState(false)
 
   // ── submission ────────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false)
-  const [step, setStep]             = useState("upload")
+  const [step, setStep] = useState("upload")
 
-  const pdfRef   = useRef()
+  const pdfRef = useRef()
   const woundRef = useRef()
 
   // ── on mount: load saved data ─────────────────────────────────────────────
@@ -75,7 +68,7 @@ export default function IntakeOnboarding() {
           setStep("form")
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoadingPrefill(false))
   }, [])
 
@@ -87,7 +80,7 @@ export default function IntakeOnboarding() {
     if (k === "surgery_phase") setOfferWound(v === "post")
   }
 
-  // ── PDF extraction ────────────────────────────────────────────────────────
+  // ── PDF extraction (UPGRADED) ─────────────────────────────────────────────
   const handlePdfChange = e => { if (e.target.files[0]) setPdfFile(e.target.files[0]) }
 
   const extractFromPdf = async () => {
@@ -96,35 +89,44 @@ export default function IntakeOnboarding() {
     try {
       const fd = new FormData()
       fd.append("file", pdfFile)
-      const res = await axios.post(`${API}/api/extract-intake`, fd, {
+
+      // Hit /api/scan — persists DischargeSummary + Medicines to DB, and auto-generates tasks in background
+      const res = await axios.post(`${API}/api/scan`, fd, {
         headers: { ...authHeader(), "Content-Type": "multipart/form-data" },
       })
-      const d = res.data
+
+      const d = res.data?.data || res.data || {}
+
+      // Resilient mapping with fallbacks
       const merged = {
-        patient_name:  d.patient_name  || "",
-        age:           d.age != null   ? String(d.age) : "",
-        gender:        d.gender        || "",
-        surgery_type:  d.surgery_type  || "",
-        surgery_phase: d.surgery_phase || "post",
-        surgery_date:  d.surgery_date  || "",
-        icd10_code:    d.icd10_code    || "",
-        cpt_code:      d.cpt_code      || "",
-        payer_id:      form.payer_id,
-        bp_sys:        d.bp_sys != null ? String(d.bp_sys) : "",
-        bp_dia:        d.bp_dia != null ? String(d.bp_dia) : "",
-        heart_rate:    d.heart_rate != null ? String(d.heart_rate) : "",
-        spo2:          d.spo2 != null ? String(d.spo2) : "",
-        temperature:   d.temperature != null ? String(d.temperature) : "",
-        hemoglobin:    d.hemoglobin != null ? String(d.hemoglobin) : "",
-        blood_sugar:   d.blood_sugar != null ? String(d.blood_sugar) : "",
-        notes:         d.notes || "",
+        patient_name: d.patient_name || d.name || "",
+        age: (d.age != null) ? String(d.age) : "",
+        gender: d.gender || d.sex || "",
+        surgery_type: d.surgery_type || d.procedure || "",
+        surgery_phase: d.surgery_phase || d.phase || "post",
+        surgery_date: d.surgery_date || d.date_of_surgery || "",
+        icd10_code: d.icd10_code || d.icd_code || "",
+        cpt_code: d.cpt_code || "",
+        payer_id: form.payer_id,
+        bp_sys: (d.bp_sys != null) ? String(d.bp_sys) : "",
+        bp_dia: (d.bp_dia != null) ? String(d.bp_dia) : "",
+        heart_rate: (d.heart_rate ?? d.pulse) != null ? String(d.heart_rate ?? d.pulse) : "",
+        spo2: (d.spo2 ?? d.oxygen_saturation) != null ? String(d.spo2 ?? d.oxygen_saturation) : "",
+        temperature: (d.temperature ?? d.temp) != null ? String(d.temperature ?? d.temp) : "",
+        hemoglobin: (d.hemoglobin ?? d.hb) != null ? String(d.hemoglobin ?? d.hb) : "",
+        blood_sugar: (d.blood_sugar ?? d.glucose) != null ? String(d.blood_sugar ?? d.glucose) : "",
+        notes: d.notes || d.pre_op_restrictions || "",
       }
+
       setForm(merged)
-      const req = ["patient_name","age","gender","surgery_type","surgery_date","icd10_code","cpt_code"]
+      setMedications(d.medication_list || d.medications || []) 
+
+      const req = ["patient_name", "age", "gender", "surgery_type", "surgery_date", "icd10_code", "cpt_code"]
       setMissingFields(req.filter(k => !merged[k]))
       if (merged.surgery_phase === "post") setOfferWound(true)
+
       setExtractDone(true); setStep("form")
-      setIsReturning(false) // treat as fresh after PDF re-upload
+      setIsReturning(false) 
     } catch {
       setExtractError("Could not extract data — please fill the form manually.")
       setExtractDone(true); setStep("form")
@@ -160,7 +162,7 @@ export default function IntakeOnboarding() {
   }
 
   // ── validation ────────────────────────────────────────────────────────────
-  const required = ["patient_name","age","gender","surgery_type","surgery_date","icd10_code","cpt_code"]
+  const required = ["patient_name", "age", "gender", "surgery_type", "surgery_date", "icd10_code", "cpt_code"]
 
   const validate = () => {
     const missing = required.filter(k => !form[k]?.trim())
@@ -172,7 +174,6 @@ export default function IntakeOnboarding() {
     return true
   }
 
-  // ── returning user: PATCH only changed fields ─────────────────────────────
   const saveUpdates = async () => {
     if (!validate()) return
     setSubmitting(true)
@@ -189,11 +190,18 @@ export default function IntakeOnboarding() {
     }
   }
 
-  // ── new user / PDF re-extract: full agent workflow ────────────────────────
   const fullSubmit = async () => {
     if (!validate()) return
     setSubmitting(true)
     try {
+      // Step 1: Update Profile with core details
+      await axios.post(`${API}/api/create-profile`, {
+        patient_name: form.patient_name,
+        surgery_type: form.surgery_type,
+        surgery_date: form.surgery_date
+      }, { headers: authHeader() })
+
+      // Step 2: Submit the rest of the form
       await axios.post(`${API}/api/submit-intake`, {
         ...form,
         wound_analysis: woundAnalysis,
@@ -213,13 +221,12 @@ export default function IntakeOnboarding() {
       placeholder={placeholder}
       value={form[k]}
       onChange={e => setField(k, e.target.value)}
-      className={`w-full rounded-xl border px-4 py-3 text-[#3E435D] placeholder:text-[#9AA7B1] outline-none transition focus:ring-2 focus:ring-[#9AA7B1]/40 ${
-        missingFields.includes(k)
+      className={`w-full rounded-xl border px-4 py-3 text-[#3E435D] placeholder:text-[#9AA7B1] outline-none transition focus:ring-2 focus:ring-[#9AA7B1]/40 ${missingFields.includes(k)
           ? "border-red-400 bg-red-50"
           : dirtyFields.has(k) && isReturning
             ? "border-[#3E435D]/40 bg-[#f5f4f0]"
             : "border-[#3E435D]/20 bg-white"
-      }`}
+        }`}
     />
   )
 
@@ -233,7 +240,6 @@ export default function IntakeOnboarding() {
     <p className="text-xs font-semibold uppercase tracking-widest text-[#9AA7B1] mb-3 mt-6">{text}</p>
   )
 
-  // ── loading spinner ───────────────────────────────────────────────────────
   if (loadingPrefill) return (
     <div className="min-h-screen bg-gradient-to-br from-[#D3D0BC] to-[#CBC3A5] flex items-center justify-center">
       <div className="rounded-2xl bg-white/90 p-10 shadow-xl text-center">
@@ -244,7 +250,7 @@ export default function IntakeOnboarding() {
   )
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#D3D0BC] via-[#D3D0BC] to-[#CBC3A5] px-4 py-10">
+    <div className="min-h-screen bg-gradient-to-br from-[#D3D0BC] via-[#D3D0BC] to-[#CBC3A5] px-4 py-10 pb-20">
       <div className="max-w-2xl mx-auto">
 
         {/* Header */}
@@ -260,12 +266,11 @@ export default function IntakeOnboarding() {
           </p>
         </div>
 
-        {/* ── Returning user banner ─────────────────────────────────────── */}
         {isReturning && (
           <div className="rounded-2xl border border-green-200 bg-green-50 p-5 mb-6 flex items-start gap-4">
             <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0 mt-0.5">
               <svg className="w-4 h-4 text-green-600" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
             </div>
             <div className="flex-1 min-w-0">
@@ -342,16 +347,15 @@ export default function IntakeOnboarding() {
 
             {sec("Patient information")}
             <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">{lbl("Full name", true)}{inp("patient_name","e.g. Rohit Sharma")}</div>
-              <div>{lbl("Age", true)}{inp("age","e.g. 42","number")}</div>
+              <div className="col-span-2">{lbl("Full name", true)}{inp("patient_name", "e.g. Rohit Sharma")}</div>
+              <div>{lbl("Age", true)}{inp("age", "e.g. 42", "number")}</div>
               <div>
                 {lbl("Gender", true)}
                 <select
                   value={form.gender}
                   onChange={e => setField("gender", e.target.value)}
-                  className={`w-full rounded-xl border px-4 py-3 text-[#3E435D] outline-none transition focus:ring-2 focus:ring-[#9AA7B1]/40 ${
-                    missingFields.includes("gender") ? "border-red-400 bg-red-50" : "border-[#3E435D]/20 bg-white"
-                  }`}
+                  className={`w-full rounded-xl border px-4 py-3 text-[#3E435D] outline-none transition focus:ring-2 focus:ring-[#9AA7B1]/40 ${missingFields.includes("gender") ? "border-red-400 bg-red-50" : "border-[#3E435D]/20 bg-white"
+                    }`}
                 >
                   <option value="">Select</option>
                   <option value="male">Male</option>
@@ -363,7 +367,7 @@ export default function IntakeOnboarding() {
 
             {sec("Surgery details")}
             <div className="grid grid-cols-2 gap-3">
-              <div>{lbl("Surgery type", true)}{inp("surgery_type","e.g. Appendectomy")}</div>
+              <div>{lbl("Surgery type", true)}{inp("surgery_type", "e.g. Appendectomy")}</div>
               <div>
                 {lbl("Phase", true)}
                 <select
@@ -375,33 +379,33 @@ export default function IntakeOnboarding() {
                   <option value="post">Post-operative</option>
                 </select>
               </div>
-              <div>{lbl("Surgery date", true)}{inp("surgery_date","","date")}</div>
-              <div>{lbl("Payer / Insurance ID")}{inp("payer_id","e.g. PAYER-001")}</div>
+              <div>{lbl("Surgery date", true)}{inp("surgery_date", "", "date")}</div>
+              <div>{lbl("Payer / Insurance ID")}{inp("payer_id", "e.g. PAYER-001")}</div>
             </div>
 
             {sec("Clinical codes (ICD-10 / CPT)")}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 {lbl("ICD-10 code", true)}
-                {inp("icd10_code","e.g. K35.89")}
+                {inp("icd10_code", "e.g. K35.89")}
                 <p className="text-xs text-[#9AA7B1] mt-1">International Classification of Diseases</p>
               </div>
               <div>
                 {lbl("CPT code", true)}
-                {inp("cpt_code","e.g. 44950")}
+                {inp("cpt_code", "e.g. 44950")}
                 <p className="text-xs text-[#9AA7B1] mt-1">Current Procedural Terminology</p>
               </div>
             </div>
 
             {sec("Vitals (for surgery readiness evaluation)")}
             <div className="grid grid-cols-3 gap-3">
-              <div>{lbl("BP Systolic")}{inp("bp_sys","mmHg","number")}</div>
-              <div>{lbl("BP Diastolic")}{inp("bp_dia","mmHg","number")}</div>
-              <div>{lbl("Heart rate")}{inp("heart_rate","bpm","number")}</div>
-              <div>{lbl("SpO₂")}{inp("spo2","% sat","number")}</div>
-              <div>{lbl("Temperature")}{inp("temperature","°C","number")}</div>
-              <div>{lbl("Hemoglobin")}{inp("hemoglobin","g/dL","number")}</div>
-              <div className="col-span-3">{lbl("Blood sugar")}{inp("blood_sugar","mg/dL","number")}</div>
+              <div>{lbl("BP Systolic")}{inp("bp_sys", "mmHg", "number")}</div>
+              <div>{lbl("BP Diastolic")}{inp("bp_dia", "mmHg", "number")}</div>
+              <div>{lbl("Heart rate")}{inp("heart_rate", "bpm", "number")}</div>
+              <div>{lbl("SpO₂")}{inp("spo2", "% sat", "number")}</div>
+              <div>{lbl("Temperature")}{inp("temperature", "°C", "number")}</div>
+              <div>{lbl("Hemoglobin")}{inp("hemoglobin", "g/dL", "number")}</div>
+              <div className="col-span-3">{lbl("Blood sugar")}{inp("blood_sugar", "mg/dL", "number")}</div>
             </div>
 
             {sec("Additional notes")}
@@ -412,6 +416,22 @@ export default function IntakeOnboarding() {
               rows={3}
               className="w-full rounded-xl border border-[#3E435D]/20 bg-white px-4 py-3 text-[#3E435D] placeholder:text-[#9AA7B1] outline-none transition focus:border-[#3E435D] focus:ring-2 focus:ring-[#9AA7B1]/40 resize-none"
             />
+
+            {medications.length > 0 && (
+              <>
+                {sec("Extracted Medications")}
+                <div className="bg-[#f8f7f4] rounded-xl border border-[#3E435D]/10 p-4 space-y-2">
+                  {medications.map((m, i) => (
+                    <div key={i} className="text-sm font-medium text-[#3E435D] border-b border-[#3E435D]/10 pb-2 last:border-0 last:pb-0">
+                      <span className="font-bold">{m.name || m}</span> {m.dosage ? `- ${m.dosage}` : ''} {m.frequency ? `(${m.frequency})` : ''}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-[#9AA7B1] mt-2">
+                  Extracted from your document and automatically saved to your Pharmacy.
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -423,7 +443,6 @@ export default function IntakeOnboarding() {
               <span className="text-[#9AA7B1] font-normal text-sm ml-2">(optional, post-op only)</span>
             </p>
 
-            {/* Show previous analysis for returning users */}
             {savedWoundAnalysis && !woundAnalysis && (
               <div className="mb-4 rounded-xl bg-[#f8f7f4] border border-[#3E435D]/10 p-4">
                 <p className="text-xs font-semibold text-[#9AA7B1] uppercase tracking-widest mb-1">Previous analysis</p>
