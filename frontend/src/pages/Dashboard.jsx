@@ -68,6 +68,12 @@ export default function Dashboard() {
   const [dbMedications, setDbMedications] = useState(null);
   const [togglingTaskId, setTogglingTaskId] = useState(null);
 
+  // ── Agent workflow state ──────────────────────────────────────────────
+  const [agentAlerts, setAgentAlerts] = useState([]);
+  const [adherenceScore, setAdherenceScore] = useState(null);
+  const [agentToast, setAgentToast] = useState(null);
+  const [inventoryReport, setInventoryReport] = useState(null);
+
   const handleWoundAnalysis = (analysis, preview) => {
     setWoundAnalysis(analysis);
     setWoundPreview(preview);
@@ -142,6 +148,23 @@ export default function Dashboard() {
     }
   };
 
+  const fetchInventoryAlerts = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/agent/inventory-alerts`, getAuthHeaders());
+      setInventoryReport(res.data);
+      // Push any new alerts to the agent alerts list
+      if (res.data?.alerts?.length > 0) {
+        setAgentAlerts(prev => {
+          const existingMsgs = new Set(prev.map(a => a.message));
+          const newOnes = res.data.alerts.filter(a => !existingMsgs.has(a.message));
+          return [...newOnes, ...prev];
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load inventory alerts", err);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await axios.post(`${API_BASE}/auth/logout`, {}, getAuthHeaders());
@@ -180,6 +203,7 @@ export default function Dashboard() {
     fetchProfile();
     fetchTasks(new Date().toISOString().slice(0, 10));
     fetchMedicines();
+    fetchInventoryAlerts();
 
     let ticking = false;
     const handleScroll = () => {
@@ -228,50 +252,50 @@ export default function Dashboard() {
     progress: calculateRecoveryProgress(profile?.surgery_date, profile?.recovery_days_total || 90)
   };
 
-  // ── THE UPGRADED INVENTORY SYNC TOGGLE ────────────────────────────────
+  // ── AGENTIC TASK COMPLETION ──────────────────────────────────────────
   const toggleTaskStatus = async (taskId) => {
     if (togglingTaskId) return;
+    const taskToUpdate = tasks.find(t => t.id === taskId);
+    if (!taskToUpdate || taskToUpdate.status === "completed") return;
+
+    setTogglingTaskId(taskId);
     try {
-      const taskToUpdate = tasks.find(t => t.id === taskId);
-      if (!taskToUpdate || taskToUpdate.status === "completed") return;
+      // Single intelligent backend call — the agent handles everything
+      const res = await axios.post(
+        `${API_BASE}/api/agent/complete-task`,
+        { task_id: taskId },
+        getAuthHeaders()
+      );
+      const agentResult = res.data;
 
-      setTogglingTaskId(taskId);
-      await axios.patch(`${API_BASE}/api/task/${taskId}`, {}, getAuthHeaders());
-      setTasks(tasks.map(task => task.id === taskId ? { ...task, status: "completed" } : task));
+      // Update local task list
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: "completed" } : t));
 
-      // Real-Time Pill Deduction
-      if (taskToUpdate.title.toLowerCase().includes("medication")) {
-        let medNameFromTask = taskToUpdate.title;
-        if (taskToUpdate.title.includes("-")) medNameFromTask = taskToUpdate.title.split("-")[1].trim();
-        else if (taskToUpdate.title.includes(":")) medNameFromTask = taskToUpdate.title.split(":")[1].trim();
+      // Update adherence score from agent
+      if (agentResult.score !== undefined) setAdherenceScore(agentResult.score);
 
-        if (medNameFromTask.toLowerCase().trim() === "take prescribed medication" || medNameFromTask.toLowerCase().trim() === "medication") {
-          const medsToDeduct = dbMedications || JSON.parse(localStorage.getItem('surgisense_active_meds') || "null") || digitizedData?.medication_list || digitizedData?.medications || [];
-          try {
-            await Promise.all(medsToDeduct.map(med => {
-              const name = med.name || med.medication_name;
-              if (name) {
-                return axios.post(`${API_BASE}/api/inventory/deduct`, { medicine_name: name }, getAuthHeaders()).catch(err => console.warn(`DB deduct failed for ${name}:`, err));
-              }
-              return Promise.resolve();
-            }));
-            console.log(`✅ DB inventory deducted for all prescribed medications`);
-            fetchMedicines();
-          } catch (err) {
-            console.warn("Batch DB deduct failed:", err);
-          }
-        } else if (medNameFromTask) {
-          try {
-            await axios.post(`${API_BASE}/api/inventory/deduct`, { medicine_name: medNameFromTask }, getAuthHeaders());
-            console.log(`✅ DB inventory deducted for: ${medNameFromTask}`);
-            fetchMedicines(); // Pulls the fresh, lower pill count from DB
-          } catch (deductErr) {
-            console.warn("DB deduct failed:", deductErr);
-          }
-        }
+      // Refresh meds if doses were deducted
+      if (agentResult.deductions?.length > 0) fetchMedicines();
+
+      // Show agent toast
+      setAgentToast(agentResult.message);
+      setTimeout(() => setAgentToast(null), 5000);
+
+      // Store any new alerts
+      if (agentResult.alerts?.length > 0) {
+        setAgentAlerts(prev => [...agentResult.alerts, ...prev]);
       }
+
+      console.log("🤖 Agent result:", agentResult);
     } catch (err) {
-      console.error("Failed to update task", err);
+      // Fallback to old endpoint if agent fails
+      console.warn("Agent endpoint failed, falling back:", err);
+      try {
+        await axios.patch(`${API_BASE}/api/task/${taskId}`, {}, getAuthHeaders());
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: "completed" } : t));
+      } catch (fallbackErr) {
+        console.error("Fallback also failed:", fallbackErr);
+      }
     } finally {
       setTogglingTaskId(null);
     }
@@ -533,7 +557,18 @@ export default function Dashboard() {
         <motion.section id="timeline" className="scroll-mt-28" initial="hidden" animate="visible" variants={fadeIn}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-[#3E435D] text-xl font-bold tracking-tight">Recovery Tasks</h2>
-            {totalTasks > 0 && <span className="text-[#9AA7B1] text-sm font-medium">{completedTasks}/{totalTasks} done</span>}
+            <div className="flex items-center gap-3">
+              {adherenceScore !== null && (
+                <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
+                  adherenceScore >= 80 ? 'bg-green-100 text-green-700' :
+                  adherenceScore >= 50 ? 'bg-amber-100 text-amber-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  {adherenceScore}% adherence
+                </span>
+              )}
+              {totalTasks > 0 && <span className="text-[#9AA7B1] text-sm font-medium">{completedTasks}/{totalTasks} done</span>}
+            </div>
           </div>
 
           {hasOverdueCritical && viewDate === todayStr && (
@@ -683,6 +718,54 @@ export default function Dashboard() {
         </section>
 
       </div>
+
+      {/* Agent Toast Notification */}
+      <AnimatePresence>
+        {agentToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 60 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 60 }}
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[90%]"
+          >
+            <div className="bg-[#3E435D] text-[#D3D0BC] px-5 py-3.5 rounded-2xl shadow-2xl shadow-[#3E435D]/30 flex items-start gap-3 border border-white/10">
+              <Sparkles className="w-5 h-5 text-[#CBC3A5] shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-[#CBC3A5] uppercase tracking-wider mb-0.5">AI Agent</p>
+                <p className="text-sm leading-snug">{agentToast}</p>
+              </div>
+              <button onClick={() => setAgentToast(null)} className="text-[#9AA7B1] hover:text-white shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Agent Alert Banners (low-stock, etc.) */}
+      <AnimatePresence>
+        {agentAlerts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="fixed top-[100px] left-1/2 -translate-x-1/2 z-30 max-w-md w-[90%] space-y-2"
+          >
+            {agentAlerts.slice(0, 3).map((alert, idx) => (
+              <div key={idx} className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-2.5 shadow-lg">
+                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 font-medium flex-1">{alert.message}</p>
+                <button
+                  onClick={() => setAgentAlerts(prev => prev.filter((_, i) => i !== idx))}
+                  className="text-amber-400 hover:text-amber-600 shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-[#3E435D]/10 px-4 py-2.5 z-40">
