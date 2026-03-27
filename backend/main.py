@@ -4,15 +4,16 @@ import logging
 import urllib.parse  # Added for URL Sanitization
 from pathlib import Path
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError, field_validator
+from typing import Optional, List
 from google_auth import router as google_router
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import fitz
 from groq import Groq
 from sqlalchemy.orm import Session
 from dependencies import get_current_user, get_db
-from models import MedicalRecord, User, PatientProfile, RecoveryTask
+from models import MedicalRecord, User, PatientProfile, RecoveryTask, DischargeSummary, Medicine, MedicationLog
 from services.rules import evaluate_patient
 from services.record_digitization import digitize_discharge_summary
 from services.speech_to_text import SpeechToTextService
@@ -80,6 +81,74 @@ class PatientVitals(BaseModel):
     hemoglobin: float
     blood_sugar: int
 
+
+# ── Pydantic schemas for LLM extraction validation ───────────────────────────
+
+class MedicationItem(BaseModel):
+    """Single medication extracted from a discharge document."""
+    name: str = "Unknown"
+    dosage: Optional[str] = None
+    frequency: Optional[str] = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def coerce_name(cls, v):
+        return str(v).strip() if v else "Unknown"
+
+
+class ScanExtraction(BaseModel):
+    """
+    Strict schema for validating raw LLM JSON output.
+    All fields are Optional with safe defaults so missing/hallucinated
+    keys never crash the DB layer.
+    """
+    patient_name:    Optional[str]  = None
+    age:             Optional[int]  = None
+    gender:          Optional[str]  = None
+    surgery_type:    Optional[str]  = None
+    surgery_date:    Optional[str]  = None
+    surgery_phase:   Optional[str]  = "post"
+    icd10_code:      Optional[str]  = None
+    cpt_code:        Optional[str]  = None
+    medication_list: List[MedicationItem] = []
+    bp_sys:          Optional[int]  = None
+    bp_dia:          Optional[int]  = None
+    heart_rate:      Optional[int]  = None
+    spo2:            Optional[int]  = None
+    temperature:     Optional[float] = None
+    hemoglobin:      Optional[float] = None
+    blood_sugar:     Optional[int]  = None
+
+    class Config:
+        extra = "ignore"  # silently drop any unexpected keys from LLM
+
+    @field_validator("age", "bp_sys", "bp_dia", "heart_rate", "spo2", "blood_sugar", mode="before")
+    @classmethod
+    def coerce_int(cls, v):
+        if v is None or v == "" or v == "null":
+            return None
+        try:
+            return int(float(str(v)))
+        except (ValueError, TypeError):
+            return None
+
+    @field_validator("temperature", "hemoglobin", mode="before")
+    @classmethod
+    def coerce_float(cls, v):
+        if v is None or v == "" or v == "null":
+            return None
+        try:
+            return float(str(v))
+        except (ValueError, TypeError):
+            return None
+
+    @field_validator("medication_list", mode="before")
+    @classmethod
+    def coerce_med_list(cls, v):
+        if not isinstance(v, list):
+            return []
+        return v
+
 @app.get("/api/profile")
 def get_profile(db: Session = Depends(get_db), user = Depends(get_current_user)):
     profile = db.query(PatientProfile).filter(PatientProfile.user_id == user.id).first()
@@ -113,8 +182,90 @@ def create_profile(profile: ProfileCreate, db: Session = Depends(get_db), user =
     db.commit()
     return {"message": "profile created"}
 
+
+# ── Background helpers for /api/scan ────────────────────────────────────────────
+
+def _bg_rag_ingest(text_content: str):
+    """Background: ingest document text into RAG vector store."""
+    try:
+        if text_content and text_content.strip():
+            rag.ingest_document(text_content)
+            logger.info("bg: RAG ingestion complete")
+    except Exception as e:
+        logger.error(f"bg: RAG ingestion failed: {e}")
+
+
+def _bg_generate_tasks(user_id: int, extracted_data: dict):
+    """Background: generate 14-day task schedule via LLM and persist to DB."""
+    from datetime import date as date_type, timedelta
+    db = SessionLocal()
+    try:
+        surgery_date_str = extracted_data.get("surgery_date")
+        if not surgery_date_str:
+            return
+
+        today = date_type.today()
+        end_date = today + timedelta(days=14)
+
+        doc_text = json.dumps(extracted_data)
+        task_prompt = f"""You are a clinical AI. Generate a daily task schedule for a patient.
+
+Return ONLY valid JSON:
+{{
+  "tasks": [
+    {{"title": "Medication - Amoxicillin 500mg", "time": "08:00 AM", "is_critical": 1}}
+  ]
+}}
+
+Rules:
+- 6-10 tasks covering the full day
+- For medication tasks, format title as "Medication - <medicine name>"
+- is_critical=1 for: medication, wound care, vitals, physiotherapy
+- is_critical=0 for: rest, diet, scheduling tasks
+- Spread times from 07:00 AM to 09:00 PM
+
+Patient data:
+{doc_text}"""
+
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": task_prompt}],
+            response_format={"type": "json_object"}
+        )
+        template_str = resp.choices[0].message.content
+        template = json.loads(template_str).get("tasks", []) if template_str else []
+
+        if template:
+            db.query(RecoveryTask).filter(
+                RecoveryTask.user_id == user_id,
+                RecoveryTask.task_date >= today.isoformat()
+            ).delete(synchronize_session=False)
+
+            for day_offset in range((end_date - today).days + 1):
+                day_str = (today + timedelta(days=day_offset)).isoformat()
+                for task in template:
+                    db.add(RecoveryTask(
+                        user_id=user_id,
+                        title=task.get("title"),
+                        time=task.get("time"),
+                        status="pending",
+                        task_date=day_str,
+                        is_critical=int(task.get("is_critical", 0))
+                    ))
+            db.commit()
+            logger.info(f"bg: auto-generated tasks for user {user_id}")
+    except Exception as e:
+        logger.error(f"bg: task generation failed: {e}")
+    finally:
+        db.close()
+
 @app.post("/api/scan")
-async def scan_document(file: UploadFile = File(...), user = Depends(get_current_user), db: Session = Depends(get_db)):
+async def scan_document(
+    file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     try:
         content = await file.read()
         text_content = ""
@@ -125,30 +276,239 @@ async def scan_document(file: UploadFile = File(...), user = Depends(get_current
         else:
             text_content = content.decode('utf-8')
 
-        if text_content and text_content.strip():
-            rag.ingest_document(text_content)
+        # ── Synchronous: LLM extraction ───────────────────────────────────
+        system_prompt = """You are a medical data extractor. Extract ALL of the following fields from the document into a single JSON object.
+Use null for any field you cannot find. Do NOT invent values.
+
+Required JSON schema:
+{
+  "patient_name": string | null,
+  "age": integer | null,
+  "gender": "male"|"female"|"other" | null,
+  "surgery_type": string | null,
+  "surgery_date": "YYYY-MM-DD" | null,
+  "surgery_phase": "pre"|"post" | null,
+  "icd10_code": string | null,
+  "cpt_code": string | null,
+  "medication_list": [{"name": string, "dosage": string, "frequency": string}] | [],
+  "bp_sys": integer | null,
+  "bp_dia": integer | null,
+  "heart_rate": integer | null,
+  "spo2": integer | null,
+  "temperature": number | null,
+  "hemoglobin": number | null,
+  "blood_sugar": integer | null
+}
+
+Output ONLY valid JSON."""
 
         chat_completion = client.chat.completions.create(
             messages=[
-                {"role": "system", "content": "You are a medical data extractor. Extract into JSON: surgery_type, surgery_date, medication_list (with name, dosage, frequency), and pre_op_restrictions. Output ONLY valid JSON."},
-                {"role": "user", "content": f"Extract data from this medical text: {text_content}"}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Extract data from this medical text:\n{text_content[:8000]}"}
             ],
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
-        
+
         response_text = chat_completion.choices[0].message.content
         if not response_text:
             raise ValueError("Empty AI response")
-            
-        extracted_data = json.loads(response_text) 
+
+        raw_data = json.loads(response_text)
+
+        # ── Pydantic validation: coerce + sanitise LLM output ─────────────
+        try:
+            validated = ScanExtraction.model_validate(raw_data)
+        except ValidationError as ve:
+            logger.warning(f"LLM output failed strict validation, attempting partial: {ve}")
+            # Salvage what we can — drop bad fields, keep the rest
+            safe_raw = {k: v for k, v in raw_data.items() if v is not None}
+            try:
+                validated = ScanExtraction.model_validate(safe_raw)
+            except ValidationError:
+                # Return raw data to frontend with a warning; skip DB persist
+                logger.error("LLM output completely invalid — skipping DB persist")
+                return {
+                    "status": "success",
+                    "data": raw_data,
+                    "warning": "Extraction completed but data could not be validated. Please review fields manually.",
+                }
+
+        extracted_data = validated.model_dump()
+
+        # ── Synchronous: DB persistence ───────────────────────────────────
         record = MedicalRecord(user_id=user.id, content=json.dumps(extracted_data))
         db.add(record)
+
+        from datetime import datetime as dt_cls
+        summary = DischargeSummary(
+            user_id=user.id,
+            patient_name=validated.patient_name,
+            age=validated.age,
+            gender=validated.gender,
+            surgery_type=validated.surgery_type,
+            surgery_date=validated.surgery_date,
+            surgery_phase=validated.surgery_phase,
+            icd10_code=validated.icd10_code,
+            cpt_code=validated.cpt_code,
+            bp_sys=validated.bp_sys,
+            bp_dia=validated.bp_dia,
+            heart_rate=validated.heart_rate,
+            spo2=validated.spo2,
+            temperature=str(validated.temperature) if validated.temperature is not None else None,
+            hemoglobin=str(validated.hemoglobin) if validated.hemoglobin is not None else None,
+            blood_sugar=validated.blood_sugar,
+            created_at=dt_cls.utcnow().isoformat(),
+        )
+        db.add(summary)
+        db.flush()
+
+        for med in validated.medication_list:
+            db.add(Medicine(
+                summary_id=summary.id,
+                user_id=user.id,
+                name=med.name,
+                dosage=med.dosage,
+                frequency=med.frequency,
+                total_quantity=30,
+                current_quantity=30,
+                dose_amount=1,
+            ))
+
         db.commit()
+
+        # ── Background: offload heavy work ────────────────────────────────
+        background_tasks.add_task(_bg_rag_ingest, text_content)
+        background_tasks.add_task(_bg_generate_tasks, user.id, extracted_data)
+
         return {"status": "success", "data": extracted_data}
+    except json.JSONDecodeError as je:
+        logger.error(f"LLM returned invalid JSON: {je}")
+        raise HTTPException(status_code=422, detail="AI returned malformed JSON. Please re-upload the document.")
     except Exception as e:
         logger.error(f"Scan Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal processing error.")
+
+class MedicineUpdateRequest(BaseModel):
+    total_quantity: int
+    dose_amount: int
+
+@app.patch("/api/medicines/{med_id}")
+def update_medicine(med_id: int, req: MedicineUpdateRequest, user = Depends(get_current_user), db: Session = Depends(get_db)):
+    medicine = db.query(Medicine).filter(Medicine.id == med_id, Medicine.user_id == user.id).first()
+    if not medicine:
+        raise HTTPException(status_code=404, detail="Medicine not found")
+    
+    medicine.total_quantity = req.total_quantity
+    medicine.current_quantity = req.total_quantity
+    medicine.dose_amount = req.dose_amount
+    db.commit()
+    return {"status": "success"}
+
+class DeductRequest(BaseModel):
+    medicine_name: str
+
+@app.get("/api/my-medicines")
+def get_my_medicines(user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Returns all medicines for the current user from the latest DischargeSummary.
+    Falls back to empty list if no summary exists.
+    """
+    latest_summary = (
+        db.query(DischargeSummary)
+        .filter(DischargeSummary.user_id == user.id)
+        .order_by(DischargeSummary.id.desc())
+        .first()
+    )
+    if not latest_summary:
+        return {"status": "success", "data": []}
+
+    medicines = (
+        db.query(Medicine)
+        .filter(Medicine.user_id == user.id, Medicine.summary_id == latest_summary.id)
+        .all()
+    )
+    return {
+        "status": "success",
+        "data": [
+            {
+                "id": m.id,
+                "name": m.name,
+                "dosage": m.dosage,
+                "frequency": m.frequency,
+                "total_quantity": m.total_quantity,
+                "current_quantity": m.current_quantity,
+                "dose_amount": m.dose_amount,
+            }
+            for m in medicines
+        ],
+    }
+
+
+@app.post("/api/inventory/deduct")
+def deduct_inventory(req: DeductRequest, user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Atomically deducts one dose from a medicine's inventory and logs the event.
+    Uses a single UPDATE statement to prevent race conditions from duplicate requests.
+    """
+    from datetime import datetime as dt_cls
+    from sqlalchemy import func
+
+    # Find matching medicine via fuzzy match (read-only lookup)
+    all_meds = db.query(Medicine).filter(Medicine.user_id == user.id).all()
+    target = req.medicine_name.lower().strip()
+    matched_med = None
+    for m in all_meds:
+        m_name = (m.name or "").lower().strip()
+        if target in m_name or m_name in target:
+            matched_med = m
+            break
+
+    if not matched_med:
+        raise HTTPException(status_code=404, detail=f"Medicine '{req.medicine_name}' not found in inventory")
+
+    dose = matched_med.dose_amount or 1
+
+    # ── Atomic UPDATE: let the database do the math ───────────────────
+    # UPDATE medicines SET current_quantity = GREATEST(current_quantity - dose, 0) WHERE id = X
+    rows_affected = (
+        db.query(Medicine)
+        .filter(Medicine.id == matched_med.id)
+        .update(
+            {Medicine.current_quantity: func.greatest(func.coalesce(Medicine.current_quantity, 0) - dose, 0)},
+            synchronize_session="fetch",
+        )
+    )
+
+    if rows_affected == 0:
+        raise HTTPException(status_code=409, detail="Concurrent update conflict — please retry")
+
+    # Read back the authoritative remaining value after atomic update
+    db.refresh(matched_med)
+    new_qty = matched_med.current_quantity or 0
+
+    log_entry = MedicationLog(
+        medicine_id=matched_med.id,
+        user_id=user.id,
+        action="deducted",
+        quantity_change=dose,
+        remaining=new_qty,
+        timestamp=dt_cls.utcnow().isoformat(),
+    )
+    db.add(log_entry)
+    db.commit()
+
+    logger.info(f"Inventory deduct: user={user.id} med={matched_med.name} deducted={dose} remaining={new_qty}")
+    return {
+        "status": "success",
+        "data": {
+            "medicine_name": matched_med.name,
+            "deducted": dose,
+            "remaining": new_qty,
+        },
+    }
+
 
 @app.post("/api/voice-to-text")
 async def process_voice(file: UploadFile = File(...)):
