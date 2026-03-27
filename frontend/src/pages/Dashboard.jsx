@@ -245,7 +245,22 @@ export default function Dashboard() {
         if (taskToUpdate.title.includes("-")) medNameFromTask = taskToUpdate.title.split("-")[1].trim();
         else if (taskToUpdate.title.includes(":")) medNameFromTask = taskToUpdate.title.split(":")[1].trim();
 
-        if (medNameFromTask) {
+        if (medNameFromTask.toLowerCase().trim() === "take prescribed medication" || medNameFromTask.toLowerCase().trim() === "medication") {
+          const medsToDeduct = dbMedications || JSON.parse(localStorage.getItem('surgisense_active_meds') || "null") || digitizedData?.medication_list || digitizedData?.medications || [];
+          try {
+            await Promise.all(medsToDeduct.map(med => {
+              const name = med.name || med.medication_name;
+              if (name) {
+                return axios.post(`${API_BASE}/api/inventory/deduct`, { medicine_name: name }, getAuthHeaders()).catch(err => console.warn(`DB deduct failed for ${name}:`, err));
+              }
+              return Promise.resolve();
+            }));
+            console.log(`✅ DB inventory deducted for all prescribed medications`);
+            fetchMedicines();
+          } catch (err) {
+            console.warn("Batch DB deduct failed:", err);
+          }
+        } else if (medNameFromTask) {
           try {
             await axios.post(`${API_BASE}/api/inventory/deduct`, { medicine_name: medNameFromTask }, getAuthHeaders());
             console.log(`✅ DB inventory deducted for: ${medNameFromTask}`);

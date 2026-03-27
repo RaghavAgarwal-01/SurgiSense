@@ -282,8 +282,12 @@ export default function Pharmacy() {
             <div className="space-y-3">
               {medications.map((med) => {
                 const medName = med.name || med.medication_name;
-                const isTracked = med.currentQuantity > 0;
-                const percentLeft = isTracked ? (med.currentQuantity / med.totalQuantity) * 100 : 0;
+                const currentQuantity = med.currentQuantity ?? med.current_quantity ?? 0;
+                const totalQuantity = med.totalQuantity ?? med.total_quantity ?? 30;
+                const doseAmount = med.doseAmount ?? med.dose_amount ?? 1;
+                
+                const isTracked = currentQuantity !== undefined && currentQuantity !== null;
+                const percentLeft = isTracked && totalQuantity ? (currentQuantity / totalQuantity) * 100 : 0;
                 const isLow = isTracked && percentLeft <= 20;
 
                 return (
@@ -293,7 +297,7 @@ export default function Pharmacy() {
                         <h3 className="text-[#3E435D] text-base font-bold mb-0.5">{medName}</h3>
                         {isTracked ? (
                           <p className="text-[#9AA7B1] text-sm">
-                            {med.currentQuantity} / {med.totalQuantity} {med.type || 'Tablet'}s remaining
+                            {currentQuantity} / {totalQuantity} {med.type || 'Tablet'}s remaining
                           </p>
                         ) : (
                           <p className="text-[#9AA7B1] text-sm">{med.dosage || "Inventory not setup"}</p>
@@ -321,10 +325,10 @@ export default function Pharmacy() {
                         <div className="flex items-center gap-3">
                           <button
                             onClick={() => takeDose(med)}
-                            disabled={med.currentQuantity <= 0}
+                            disabled={currentQuantity <= 0}
                             className="flex-1 bg-[#D3D0BC]/30 text-[#3E435D] py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#D3D0BC]/60 transition-colors disabled:opacity-50"
                           >
-                            <Minus className="w-4 h-4" /> Take Dose ({med.doseAmount || 1} {med.type === 'Tablet' ? 'pill' : 'ml'})
+                            <Minus className="w-4 h-4" /> Take Dose ({doseAmount} {med.type === 'Tablet' ? 'pill' : 'ml'})
                           </button>
                         </div>
                       </>
