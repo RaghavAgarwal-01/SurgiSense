@@ -13,7 +13,8 @@ import fitz
 from groq import Groq
 from sqlalchemy.orm import Session
 from dependencies import get_current_user, get_db
-from models import MedicalRecord, User, PatientProfile, RecoveryTask, DischargeSummary, Medicine, MedicationLog
+from models import MedicalRecord, User, PatientProfile, RecoveryTask, DischargeSummary, Medicine, MedicationLog, AdherenceLog, AgentAlert
+from services.medication_agent import execute_medication_completion, check_inventory_alerts
 from services.rules_ai import evaluate_patient
 from services.record_digitization import digitize_discharge_summary
 from services.speech_to_text import SpeechToTextService
@@ -858,6 +859,90 @@ def update_task(task_id: int, user = Depends(get_current_user), db: Session = De
     task.status = "completed" # type: ignore
     db.commit()
     return {"message": "task updated"}
+
+
+# ── AGENTIC MEDICATION WORKFLOW ──────────────────────────────────────────────
+
+class AgentTaskRequest(BaseModel):
+    task_id: int
+
+@app.post("/api/agent/complete-task")
+def agent_complete_task(
+    req: AgentTaskRequest,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Agentic endpoint: completes a task through a multi-step intelligent pipeline.
+
+    Pipeline steps:
+      1. Verify task exists and belongs to user
+      2. Mark task as completed
+      3. Atomically deduct doses from matching medicines
+      4. Log adherence (on_time / late)
+      5. Check inventory levels → generate low-stock alerts
+      6. Calculate today's adherence score
+      7. Return structured summary of all actions taken
+    """
+    result = execute_medication_completion(user.id, req.task_id, db)
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+@app.get("/api/agent/alerts")
+def get_agent_alerts(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns unread agent alerts for the current user."""
+    alerts = db.query(AgentAlert).filter(
+        AgentAlert.user_id == user.id,
+        AgentAlert.is_read == 0,
+    ).order_by(AgentAlert.id.desc()).all()
+    return {
+        "alerts": [
+            {
+                "id": a.id,
+                "type": a.alert_type,
+                "message": a.message,
+                "data": json.loads(a.data_json) if a.data_json else None,
+                "created_at": a.created_at,
+            }
+            for a in alerts
+        ]
+    }
+
+
+@app.patch("/api/agent/alerts/{alert_id}/read")
+def mark_alert_read(
+    alert_id: int,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Mark an agent alert as read."""
+    alert = db.query(AgentAlert).filter(
+        AgentAlert.id == alert_id,
+        AgentAlert.user_id == user.id,
+    ).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    alert.is_read = 1
+    db.commit()
+    return {"status": "success"}
+
+
+@app.get("/api/agent/inventory-alerts")
+def get_inventory_alerts(
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Proactive inventory intelligence — called on dashboard load.
+    Scans all medicines, calculates days-until-empty, returns severity-classified report.
+    """
+    return check_inventory_alerts(user.id, db)
+
 
 def calculate_distance(lon1, lat1, lon2, lat2):
     lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
