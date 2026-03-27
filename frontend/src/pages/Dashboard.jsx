@@ -110,6 +110,7 @@ export default function Dashboard() {
   ]);
 
   const [viewDate, setViewDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [readinessReport, setReadinessReport] = useState(null);
   const notifiedTaskIds = useRef(new Set());
 
   const fetchUserRecords = async () => {
@@ -139,7 +140,18 @@ export default function Dashboard() {
     }
   };
 
-  const fetchProfile = async () => {
+  const fetchReadiness = async () => {
+  try {
+    const res = await axios.get(`${API_BASE}/api/intake-report`, getAuthHeaders());
+    if (res.data && res.data.status !== 'no_report') {
+      setReadinessReport(res.data);
+    }
+  } catch (err) {
+    // silently skip if not available
+  }
+};
+
+const fetchProfile = async () => {
     try {
       const res = await axios.get(`${API_BASE}/api/profile`, getAuthHeaders());
       setProfile(res.data);
@@ -240,6 +252,7 @@ export default function Dashboard() {
     fetchUserRecords();
     fetchProfile();
     fetchTasks(new Date().toISOString().slice(0, 10));
+    fetchReadiness();
     fetchMedicines();
     fetchInventoryAlerts();
 
@@ -800,6 +813,91 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+
+        {/* Surgery Readiness Card */}
+        {readinessReport && (() => {
+          const trail = readinessReport.audit_trail || [];
+          const readStep = trail.find(s => s.step === 'readiness_evaluation');
+          const readiness = readStep?.result;
+          if (!readiness) return null;
+          const verdictMap = {
+            READY:       { label: 'Ready for Surgery',          cls: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-400', border: 'border-emerald-200' },
+            CONDITIONAL: { label: 'Conditional — Review Needed', cls: 'bg-amber-100 text-amber-700',   dot: 'bg-amber-400',   border: 'border-amber-200'   },
+            NOT_READY:   { label: 'Not Ready',                  cls: 'bg-red-100 text-red-600',        dot: 'bg-red-400',     border: 'border-red-200'     },
+            INCOMPLETE:  { label: 'Incomplete Vitals',          cls: 'bg-[#D3D0BC]/40 text-[#3E435D]', dot: 'bg-[#9AA7B1]',  border: 'border-[#CBC3A5]/50'},
+          };
+          const v = verdictMap[readiness.verdict] || verdictMap.INCOMPLETE;
+          const passed = readiness.criteria?.filter(c => c.passed).length || 0;
+          const total  = readiness.criteria?.length || 0;
+          const wfBadge = {
+            APPROVED:        { label: 'Approved',        cls: 'bg-emerald-100 text-emerald-700' },
+            REQUIRES_REVIEW: { label: 'Requires Review', cls: 'bg-amber-100 text-amber-700'    },
+            DEFER:           { label: 'Deferred',        cls: 'bg-red-100 text-red-600'         },
+          }[readinessReport.workflow_status];
+          return (
+            <section className={`bg-white/80 backdrop-blur-sm rounded-2xl p-5 border ${v.border} border-opacity-60`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 bg-[#3E435D] rounded-xl flex items-center justify-center">
+                    <ShieldCheck className="w-5 h-5 text-[#CBC3A5]" />
+                  </div>
+                  <div>
+                    <h2 className="text-[#3E435D] text-base font-bold leading-tight">Surgery Readiness</h2>
+                    <p className="text-[#9AA7B1] text-xs">From your intake assessment</p>
+                  </div>
+                </div>
+                <Link to="/surgery-readiness" className="text-xs text-[#9AA7B1] hover:text-[#3E435D] font-semibold transition-colors">
+                  Full report →
+                </Link>
+              </div>
+
+              {/* Verdict pill + workflow badge */}
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-2 h-2 rounded-full ${v.dot}`} />
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${v.cls}`}>{v.label}</span>
+                </div>
+                {wfBadge && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${wfBadge.cls}`}>{wfBadge.label}</span>
+                )}
+              </div>
+
+              {/* Criteria progress bar */}
+              {total > 0 && (
+                <div className="mb-3">
+                  <div className="flex justify-between text-[10px] text-[#9AA7B1] font-medium mb-1">
+                    <span>Clinical criteria</span><span>{passed}/{total} passed</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-[#D3D0BC]/50 rounded-full overflow-hidden">
+                    <div className={`h-1.5 rounded-full transition-all duration-700 ${v.dot}`}
+                      style={{ width: `${total ? (passed / total) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Failed criteria pills */}
+              {readiness.flags?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {readiness.flags.map((f, i) => (
+                    <span key={i} className="text-[10px] bg-red-50 text-red-600 border border-red-100 px-2 py-0.5 rounded-full font-medium">
+                      ✗ {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Guardrails */}
+              {readinessReport.guardrails?.length > 0 && (
+                <div className="mt-2.5 p-2.5 rounded-lg bg-amber-50 border border-amber-100">
+                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wide mb-1">Guardrails</p>
+                  {readinessReport.guardrails.map((g, i) => (
+                    <p key={i} className="text-[10px] text-amber-600 leading-snug">• {g}</p>
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })()}
 
         {/* UPGRADED Medications Section */}
         <section className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-[#3E435D]/5">
