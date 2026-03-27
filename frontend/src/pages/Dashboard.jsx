@@ -19,6 +19,7 @@ import {
   Sparkles,
   ShieldCheck,
   LogOut,
+  Bell,
 } from "lucide-react";
 import { Progress } from "../components/ui/Progress";
 import ReactMarkdown from 'react-markdown';
@@ -28,6 +29,8 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import MedicationSelector from "../components/ui/medication_selector";
 import AgentReportCard from "../components/ui/AgentReportCard";
+import AdherenceCard from "../components/ui/AdherenceCard";
+import ReasoningChain from "../components/ui/ReasoningChain";
 
 const API_BASE = "http://localhost:8000";
 const getAuthHeaders = () => {
@@ -73,6 +76,14 @@ export default function Dashboard() {
   const [adherenceScore, setAdherenceScore] = useState(null);
   const [agentToast, setAgentToast] = useState(null);
   const [inventoryReport, setInventoryReport] = useState(null);
+
+  // ── Phase 4: Notification bell state ──────────────────────────────────
+  const [bellAlerts, setBellAlerts] = useState([]);
+  const [isBellOpen, setIsBellOpen] = useState(false);
+
+  // ── Reasoning chain state ─────────────────────────────────────────────
+  const [reasoningChain, setReasoningChain] = useState([]);
+  const [showReasoning, setShowReasoning] = useState(false);
 
   const handleWoundAnalysis = (analysis, preview) => {
     setWoundAnalysis(analysis);
@@ -165,6 +176,25 @@ export default function Dashboard() {
     }
   };
 
+  // ── Phase 4: Poll agent alerts every 60 seconds ───────────────────────
+  const fetchBellAlerts = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/agent/alerts`, getAuthHeaders());
+      if (res.data?.alerts) setBellAlerts(res.data.alerts);
+    } catch (err) {
+      console.error("Failed to poll alerts", err);
+    }
+  };
+
+  const markAlertRead = async (alertId) => {
+    try {
+      await axios.patch(`${API_BASE}/api/agent/alerts/${alertId}/read`, {}, getAuthHeaders());
+      setBellAlerts(prev => prev.filter(a => a.id !== alertId));
+    } catch (err) {
+      console.error("Failed to mark alert read", err);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await axios.post(`${API_BASE}/auth/logout`, {}, getAuthHeaders());
@@ -196,6 +226,13 @@ export default function Dashboard() {
     pollOverdue();
     const interval = setInterval(pollOverdue, 5 * 60 * 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Phase 4: alert polling interval
+  useEffect(() => {
+    fetchBellAlerts();
+    const alertInterval = setInterval(fetchBellAlerts, 60 * 1000);
+    return () => clearInterval(alertInterval);
   }, []);
 
   useEffect(() => {
@@ -287,6 +324,12 @@ export default function Dashboard() {
       }
 
       console.log("🤖 Agent result:", agentResult);
+
+      // Show reasoning chain if available
+      if (agentResult.reasoning_chain?.length > 0) {
+        setReasoningChain(agentResult.reasoning_chain);
+        setShowReasoning(true);
+      }
     } catch (err) {
       // Fallback to old endpoint if agent fails
       console.warn("Agent endpoint failed, falling back:", err);
@@ -478,6 +521,73 @@ export default function Dashboard() {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Phase 4: Notification Bell */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsBellOpen(!isBellOpen)}
+                  className="relative p-2 rounded-lg text-[#D3D0BC]/70 hover:bg-[#CBC3A5]/10 transition-colors"
+                >
+                  <Bell className="w-5 h-5" />
+                  {bellAlerts.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center min-w-[18px] h-[18px] shadow-lg">
+                      {bellAlerts.length > 9 ? '9+' : bellAlerts.length}
+                    </span>
+                  )}
+                </button>
+                {/* Alerts dropdown */}
+                <AnimatePresence>
+                  {isBellOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                      className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-y-auto bg-white rounded-2xl shadow-2xl border border-[#3E435D]/10 z-50"
+                    >
+                      <div className="px-4 py-3 border-b border-[#3E435D]/10 flex items-center justify-between">
+                        <h3 className="text-[#3E435D] text-sm font-bold">Agent Alerts</h3>
+                        {bellAlerts.length > 0 && (
+                          <span className="text-[10px] font-bold text-[#9AA7B1] bg-[#D3D0BC]/30 px-2 py-0.5 rounded-full">
+                            {bellAlerts.length} unread
+                          </span>
+                        )}
+                      </div>
+                      {bellAlerts.length === 0 ? (
+                        <div className="px-4 py-8 text-center">
+                          <Bell className="w-8 h-8 text-[#9AA7B1]/40 mx-auto mb-2" />
+                          <p className="text-[#9AA7B1] text-sm">No new alerts</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-[#3E435D]/5">
+                          {bellAlerts.slice(0, 10).map((alert) => (
+                            <div key={alert.id} className="px-4 py-3 hover:bg-[#D3D0BC]/10 transition-colors">
+                              <div className="flex items-start gap-2.5">
+                                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                                  alert.type === 'missed_dose' ? 'bg-red-400' :
+                                  alert.type === 'low_stock' ? 'bg-amber-400' :
+                                  'bg-blue-400'
+                                }`} />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-[#3E435D] font-medium leading-snug">{alert.message}</p>
+                                  <p className="text-[10px] text-[#9AA7B1] mt-1">
+                                    {alert.created_at ? new Date(alert.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); markAlertRead(alert.id); }}
+                                  className="text-[#9AA7B1] hover:text-[#3E435D] shrink-0 p-0.5"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
               <div className="hidden md:flex items-center gap-1">
                 <Link to="/dashboard" className="px-3 py-1.5 rounded-lg text-[#CBC3A5] text-sm font-medium bg-[#CBC3A5]/10">Home</Link>
                 <Link to="/chat" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Chat</Link>
@@ -552,6 +662,18 @@ export default function Dashboard() {
         <motion.div initial="hidden" animate="visible" variants={fadeIn}>
           <AgentReportCard />
         </motion.div>
+
+        {/* Phase 3: Adherence Card */}
+        <motion.div initial="hidden" animate="visible" variants={fadeIn}>
+          <AdherenceCard />
+        </motion.div>
+
+        {/* Agent Reasoning Chain */}
+        <ReasoningChain
+          chain={reasoningChain}
+          visible={showReasoning}
+          onClose={() => setShowReasoning(false)}
+        />
 
         {/* Recovery Tasks */}
         <motion.section id="timeline" className="scroll-mt-28" initial="hidden" animate="visible" variants={fadeIn}>
