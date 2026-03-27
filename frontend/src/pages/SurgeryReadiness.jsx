@@ -400,7 +400,49 @@ export default function SurgeryReadiness() {
                     {statusInfo.description}
                   </p>
 
-                  <div className="mt-4 pt-4 border-t border-current/10">
+                  {/* Detailed Clinical Reasoning */}
+                  {result.reasoning && (
+                    <div className="mt-6 pt-6 border-t border-current/10">
+                      <h4 className={`text-sm font-bold uppercase tracking-widest mb-3 ${statusInfo.textColor}`}>
+                        Clinical Reasoning
+                      </h4>
+                      <div className={`bg-white/50 rounded-lg p-4 text-xs leading-relaxed whitespace-pre-wrap font-mono ${statusInfo.textColor}`}>
+                        {result.reasoning}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Risk Factors */}
+                  {result.risk_factors && result.risk_factors.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-current/10">
+                      <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 opacity-60 ${statusInfo.textColor}`}>
+                        Identified Risk Factors
+                      </h4>
+                      <ul className={`space-y-2 text-xs leading-relaxed ${statusInfo.textColor}`}>
+                        {result.risk_factors.map((risk, idx) => (
+                          <li key={idx} className="flex gap-2">
+                            <span className="text-lg leading-none">•</span>
+                            <span>{risk}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* ASA Classification */}
+                  {result.asa_class && (
+                    <div className="mt-4 pt-4 border-t border-current/10">
+                      <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 opacity-60 ${statusInfo.textColor}`}>
+                        ASA Physical Status Classification
+                      </h4>
+                      <p className={`text-sm font-bold ${statusInfo.textColor}`}>
+                        {result.asa_class}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Submitted Vitals */}
+                  <div className="mt-6 pt-6 border-t border-current/10">
                     <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 opacity-60 ${statusInfo.textColor}`}>
                       Submitted Vitals
                     </h4>
@@ -414,6 +456,14 @@ export default function SurgeryReadiness() {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Clinical Disclaimer */}
+                  <div className="mt-6 pt-4 border-t border-current/10">
+                    <p className={`text-xs italic opacity-70 ${statusInfo.textColor}`}>
+                      ⚕️ This evaluation is based on preoperative vital assessment and established clinical guidelines (ASA, WHO Surgical Safety Checklist, ACC/AHA).
+                      It does not replace comprehensive preoperative evaluation by a physician or anesthesiologist. All surgical decisions require medical professional review.
+                    </p>
                   </div>
                 </div>
               </div>

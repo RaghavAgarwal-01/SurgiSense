@@ -14,7 +14,7 @@ from groq import Groq
 from sqlalchemy.orm import Session
 from dependencies import get_current_user, get_db
 from models import MedicalRecord, User, PatientProfile, RecoveryTask, DischargeSummary, Medicine, MedicationLog
-from services.rules import evaluate_patient
+from services.rules_ai import evaluate_patient
 from services.record_digitization import digitize_discharge_summary
 from services.speech_to_text import SpeechToTextService
 from services.wound_analysis import WoundAnalysisService
@@ -159,16 +159,16 @@ def get_profile(db: Session = Depends(get_db), user = Depends(get_current_user))
         "patient_name": profile.patient_name,
         "surgery_type": profile.surgery_type,
         "surgery_date": profile.surgery_date,
-        "recovery_days_total": profile.recovery_days_total
+        "recovery_days_total": getattr(profile, "recovery_days_total", 90)
     }
 
 @app.post("/api/create-profile")
 def create_profile(profile: ProfileCreate, db: Session = Depends(get_db), user = Depends(get_current_user)):
     existing = db.query(PatientProfile).filter(PatientProfile.user_id == user.id).first()
     if existing:
-        existing.patient_name = profile.patient_name # type: ignore
-        existing.surgery_type = profile.surgery_type # type: ignore
-        existing.surgery_date = profile.surgery_date # type: ignore
+        existing.patient_name = profile.patient_name 
+        existing.surgery_type = profile.surgery_type 
+        existing.surgery_date = profile.surgery_date 
         db.commit()
         return {"message": "profile updated"}
     new_profile = PatientProfile(
@@ -322,12 +322,10 @@ Output ONLY valid JSON."""
             validated = ScanExtraction.model_validate(raw_data)
         except ValidationError as ve:
             logger.warning(f"LLM output failed strict validation, attempting partial: {ve}")
-            # Salvage what we can — drop bad fields, keep the rest
             safe_raw = {k: v for k, v in raw_data.items() if v is not None}
             try:
                 validated = ScanExtraction.model_validate(safe_raw)
             except ValidationError:
-                # Return raw data to frontend with a warning; skip DB persist
                 logger.error("LLM output completely invalid — skipping DB persist")
                 return {
                     "status": "success",
@@ -471,7 +469,6 @@ def deduct_inventory(req: DeductRequest, user = Depends(get_current_user), db: S
     dose = matched_med.dose_amount or 1
 
     # ── Atomic UPDATE: let the database do the math ───────────────────
-    # UPDATE medicines SET current_quantity = GREATEST(current_quantity - dose, 0) WHERE id = X
     rows_affected = (
         db.query(Medicine)
         .filter(Medicine.id == matched_med.id)
@@ -550,9 +547,6 @@ async def generate_tasks(request: TaskGenerationRequest, user = Depends(get_curr
     from datetime import date as date_type
     today_str = date_type.today().isoformat()
 
-    # Check if tasks for TODAY already exist — if so return them directly as dicts
-    # (old code returned ORM objects which are not JSON serializable, and the
-    #  already_generated branch was skipped entirely by the frontend status check)
     existing_today = db.query(RecoveryTask).filter(
         RecoveryTask.user_id == user.id,
         RecoveryTask.task_date == today_str
@@ -560,12 +554,11 @@ async def generate_tasks(request: TaskGenerationRequest, user = Depends(get_curr
     if existing_today:
         return {"status": "success", "tasks": [
             {"id": t.id, "title": t.title, "time": t.time,
-             "status": t.status, "task_date": t.task_date, "is_critical": t.is_critical}
+             "status": t.status, "task_date": t.task_date, "is_critical": getattr(t, "is_critical", 0)}
             for t in existing_today
         ]}
 
     try:
-        # Build a richer prompt that asks for critical flag and daily scheduling
         prompt = f"""You are a clinical AI. Generate a daily task schedule for a patient based on their medical document.
 
 Return ONLY valid JSON in this exact format:
@@ -732,14 +725,20 @@ async def generate_daily_tasks(
     db: Session = Depends(get_db)
 ):
     """
-    Generates tasks for EVERY day from today until the surgery/recovery end date.
-    Called once after intake submission. Uses the template generated for today
-    and creates copies for each remaining day so the user has a full schedule.
+    Generates tasks for EVERY day from the start date to the end date based on phase:
+    
+    Pre-operative:
+      - Start: pdf_upload_date (when medical document was uploaded)
+      - End: surgery_date (inclusive)
+    
+    Post-operative:
+      - Start: today
+      - End: next_appointment_date (or 14 days if no appointment date set)
     """
     from datetime import date as date_type, timedelta
-
+    
     profile = db.query(PatientProfile).filter(PatientProfile.user_id == user.id).first()
-    if not profile or not profile.surgery_date:
+    if not profile or not getattr(profile, "surgery_date", None):
         raise HTTPException(status_code=400, detail="Surgery date not set in profile")
 
     try:
@@ -750,14 +749,29 @@ async def generate_daily_tasks(
     today = date_type.today()
     phase = getattr(profile, "surgery_phase", "post") or "post"
 
-    # For pre-op: generate until day before surgery
-    # For post-op: generate for next 14 days (rolling window)
+    # Determine start and end dates based on phase
     if phase == "pre":
-        end_date = surgery_date - timedelta(days=1)
+        # Pre-op: from PDF upload date (or today if no upload date) until surgery date (inclusive)
+        if getattr(profile, "pdf_upload_date", None):
+            try:
+                start_date = date_type.fromisoformat(profile.pdf_upload_date)
+            except Exception:
+                start_date = today
+        else:
+            start_date = today
+        end_date = surgery_date
     else:
-        end_date = today + timedelta(days=14)
+        # Post-op: from today until next appointment date (or 14 days if not set)
+        start_date = today
+        if getattr(profile, "next_appointment_date", None):
+            try:
+                end_date = date_type.fromisoformat(profile.next_appointment_date)
+            except Exception:
+                end_date = today + timedelta(days=14)
+        else:
+            end_date = today + timedelta(days=14)
 
-    if end_date < today:
+    if end_date < start_date:
         return {"status": "no_dates", "message": "No future dates to schedule"}
 
     # Generate the base task template from the document (single day)
@@ -792,17 +806,18 @@ Medical document:
     if not template:
         raise HTTPException(status_code=500, detail="No tasks in template")
 
-    # Delete any existing future tasks for this user so we don't duplicate
+    # Delete any existing tasks for the date range for this user to avoid duplicates
     db.query(RecoveryTask).filter(
         RecoveryTask.user_id == user.id,
-        RecoveryTask.task_date >= today.isoformat()
+        RecoveryTask.task_date >= start_date.isoformat(),
+        RecoveryTask.task_date <= end_date.isoformat()
     ).delete(synchronize_session=False)
 
     # Stamp the template onto every day in the range
-    total_days = (end_date - today).days + 1
+    total_days = (end_date - start_date).days + 1
     created = 0
     for day_offset in range(total_days):
-        day = today + timedelta(days=day_offset)
+        day = start_date + timedelta(days=day_offset)
         day_str = day.isoformat()
         for task in template:
             db.add(RecoveryTask(
@@ -830,7 +845,7 @@ Medical document:
         "tasks": [
             {"id": t.id, "title": t.title, "time": t.time,
               "status": t.status, "task_date": t.task_date,
-              "is_critical": t.is_critical}
+              "is_critical": getattr(t, "is_critical", 0)}
             for t in today_tasks
         ]
     }

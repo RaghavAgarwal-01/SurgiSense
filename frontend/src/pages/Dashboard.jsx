@@ -27,6 +27,7 @@ import axios from "axios";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import MedicationSelector from "../components/ui/medication_selector";
+import AgentReportCard from "../components/ui/AgentReportCard";
 
 const API_BASE = "http://localhost:8000";
 const getAuthHeaders = () => {
@@ -144,7 +145,7 @@ export default function Dashboard() {
   const handleLogout = async () => {
     try {
       await axios.post(`${API_BASE}/auth/logout`, {}, getAuthHeaders());
-    } catch (err) {}
+    } catch (err) { }
     localStorage.removeItem("token");
     localStorage.removeItem("surgisense_active_meds");
     navigate("/login");
@@ -167,7 +168,7 @@ export default function Dashboard() {
             tag: `task-${task.id}`,
           });
         });
-      } catch (_) {}
+      } catch (_) { }
     };
     pollOverdue();
     const interval = setInterval(pollOverdue, 5 * 60 * 1000);
@@ -234,7 +235,7 @@ export default function Dashboard() {
       const taskToUpdate = tasks.find(t => t.id === taskId);
       if (!taskToUpdate || taskToUpdate.status === "completed") return;
 
-      setTogglingTaskId(taskId); 
+      setTogglingTaskId(taskId);
       await axios.patch(`${API_BASE}/api/task/${taskId}`, {}, getAuthHeaders());
       setTasks(tasks.map(task => task.id === taskId ? { ...task, status: "completed" } : task));
 
@@ -283,7 +284,7 @@ export default function Dashboard() {
             document_text: JSON.stringify(extractedData)
           }, getAuthHeaders());
           if (fallback.data.tasks && fallback.data.tasks.length > 0) setTasks(fallback.data.tasks);
-        } catch (_) {}
+        } catch (_) { }
       }
     } catch (err) {
       console.error("Digitization failed", err);
@@ -330,7 +331,84 @@ export default function Dashboard() {
     }
   }, [profile]);
 
-  if (!profile) return <div className="min-h-screen bg-[#D3D0BC] flex items-center justify-center text-[#3E435D] font-medium">Loading Dashboard...</div>;
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-[#D3D0BC] flex flex-col">
+        {/* Skeleton navbar */}
+        <div className="bg-[#3E435D] px-5 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-[#CBC3A5]/30 rounded-xl animate-pulse" />
+            <div className="space-y-1.5">
+              <div className="w-32 h-3.5 bg-[#CBC3A5]/30 rounded-full animate-pulse" />
+              <div className="w-20 h-2.5 bg-[#CBC3A5]/20 rounded-full animate-pulse" />
+            </div>
+          </div>
+          <div className="hidden md:flex gap-2">
+            {[60, 40, 64, 52].map((w, i) => (
+              <div key={i} className="h-7 rounded-lg bg-[#CBC3A5]/20 animate-pulse" style={{ width: w }} />
+            ))}
+          </div>
+        </div>
+
+        {/* Centered pulse logo + message */}
+        <div className="flex-1 flex flex-col items-center justify-center gap-6">
+          {/* Animated heart logo */}
+          <div className="relative flex items-center justify-center">
+            {/* Outer ring pulse */}
+            <div className="absolute w-24 h-24 rounded-full bg-[#3E435D]/10 animate-ping" style={{ animationDuration: '1.8s' }} />
+            <div className="absolute w-16 h-16 rounded-full bg-[#3E435D]/15 animate-ping" style={{ animationDuration: '1.8s', animationDelay: '0.3s' }} />
+            {/* Core icon */}
+            <div className="relative w-14 h-14 bg-[#3E435D] rounded-2xl flex items-center justify-center shadow-lg shadow-[#3E435D]/25">
+              <svg className="w-7 h-7 text-[#CBC3A5]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Text */}
+          <div className="text-center space-y-1.5">
+            <p className="text-[#3E435D] font-semibold text-base tracking-tight">SurgiSense</p>
+            <p className="text-[#9AA7B1] text-sm">Loading your recovery dashboard…</p>
+          </div>
+
+          {/* Animated progress dots */}
+          <div className="flex gap-1.5">
+            {[0, 1, 2].map(i => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-[#3E435D]/40 animate-bounce"
+                style={{ animationDelay: `${i * 0.18}s`, animationDuration: '0.9s' }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Skeleton content preview */}
+        <div className="px-5 pb-8 space-y-3 max-w-2xl mx-auto w-full">
+          {/* Quick actions skeleton */}
+          <div className="grid grid-cols-4 gap-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-white/50 rounded-2xl p-4 flex flex-col items-center gap-2 animate-pulse">
+                <div className="w-10 h-10 rounded-xl bg-[#3E435D]/10" />
+                <div className="w-12 h-2.5 rounded-full bg-[#3E435D]/10" />
+              </div>
+            ))}
+          </div>
+          {/* Task list skeleton */}
+          <div className="bg-white/50 rounded-2xl p-5 space-y-3 animate-pulse">
+            <div className="w-36 h-4 rounded-full bg-[#3E435D]/15" />
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 py-1">
+                <div className="w-5 h-5 rounded-full bg-[#CBC3A5]/40 shrink-0" />
+                <div className="flex-1 h-3 rounded-full bg-[#CBC3A5]/40" style={{ width: `${70 - i * 10}%` }} />
+                <div className="w-14 h-3 rounded-full bg-[#CBC3A5]/30" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#D3D0BC] to-[#D3D0BC]/90">
@@ -364,6 +442,7 @@ export default function Dashboard() {
               <div className="hidden md:flex items-center gap-1">
                 <Link to="/dashboard" className="px-3 py-1.5 rounded-lg text-[#CBC3A5] text-sm font-medium bg-[#CBC3A5]/10">Home</Link>
                 <Link to="/chat" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Chat</Link>
+                <Link to="/surgery-readiness" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Readiness</Link>
                 <Link to="/pharmacy" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Pharmacy</Link>
                 <button onClick={handleLogout} className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors flex items-center gap-2">
                   <LogOut className="w-4 h-4" /> Logout
@@ -380,6 +459,31 @@ export default function Dashboard() {
           </div>
         </div>
       </header>
+
+      {/* Mobile menu */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="fixed left-0 right-0 bg-[#3E435D]/95 backdrop-blur-md z-40 border-b border-white/5 md:hidden" style={{ top: headerRef.current ? headerRef.current.offsetHeight + 'px' : '80px' }}>
+            <div className="px-5 py-3 space-y-1">
+              {[
+                { to: "/dashboard", icon: Home, label: "Dashboard" },
+                { to: "/chat", icon: MessageCircle, label: "AI Chat" },
+                { to: "/surgery-readiness", icon: ShieldCheck, label: "Readiness" },
+                { to: "/pharmacy", icon: Pill, label: "Pharmacy" },
+              ].map(item => (
+                <Link key={item.to} to={item.to} onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors">
+                  <item.icon className="w-5 h-5 text-[#CBC3A5]" />
+                  <span className="text-[#D3D0BC] text-sm font-medium">{item.label}</span>
+                </Link>
+              ))}
+              <button onClick={() => { handleLogout(); setIsMenuOpen(false); }} className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors w-full">
+                <LogOut className="w-5 h-5 text-[#CBC3A5]" />
+                <span className="text-[#D3D0BC] text-sm font-medium">Logout</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-5 pt-28 pb-24 space-y-6">
@@ -405,6 +509,11 @@ export default function Dashboard() {
           })}
         </motion.div>
 
+        {/* AI Agent Workflow Report */}
+        <motion.div initial="hidden" animate="visible" variants={fadeIn}>
+          <AgentReportCard />
+        </motion.div>
+
         {/* Recovery Tasks */}
         <motion.section id="timeline" className="scroll-mt-28" initial="hidden" animate="visible" variants={fadeIn}>
           <div className="flex items-center justify-between mb-3">
@@ -428,9 +537,8 @@ export default function Dashboard() {
               return (
                 <button
                   key={dStr} onClick={() => setViewDate(dStr)}
-                  className={`flex flex-col items-center px-3 py-2 rounded-xl border text-xs font-medium shrink-0 transition-all ${
-                    isSelected ? 'bg-[#3E435D] border-[#3E435D] text-[#D3D0BC]' : 'bg-white/80 border-[#3E435D]/10 text-[#9AA7B1] hover:border-[#3E435D]/30'
-                  }`}
+                  className={`flex flex-col items-center px-3 py-2 rounded-xl border text-xs font-medium shrink-0 transition-all ${isSelected ? 'bg-[#3E435D] border-[#3E435D] text-[#D3D0BC]' : 'bg-white/80 border-[#3E435D]/10 text-[#9AA7B1] hover:border-[#3E435D]/30'
+                    }`}
                 >
                   <span className="text-[10px] uppercase tracking-wide">{dStr === todayStr ? 'Today' : d.toLocaleDateString('en-IN', { weekday: 'short' })}</span>
                   <span className={isSelected ? 'text-[#D3D0BC]' : 'text-[#3E435D]'}>{d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
@@ -507,13 +615,13 @@ export default function Dashboard() {
 
         {/* Wound Check */}
         <section id="wound" className="scroll-mt-28 bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-[#3E435D]/5">
-            <Vision onAnalysisComplete={handleWoundAnalysis} />
-            {woundAnalysis && (
-              <div className="mt-4 p-4 rounded-xl bg-[#D3D0BC]/10 border border-[#3E435D]/10 text-sm text-[#3E435D]">
-                <h4 className="font-bold mb-2">Analysis Results:</h4>
-                <ReactMarkdown>{woundAnalysis}</ReactMarkdown>
-              </div>
-            )}
+          <Vision onAnalysisComplete={handleWoundAnalysis} />
+          {woundAnalysis && (
+            <div className="mt-4 p-4 rounded-xl bg-[#D3D0BC]/10 border border-[#3E435D]/10 text-sm text-[#3E435D]">
+              <h4 className="font-bold mb-2">Analysis Results:</h4>
+              <ReactMarkdown>{woundAnalysis}</ReactMarkdown>
+            </div>
+          )}
         </section>
 
         {/* UPGRADED Medications Section */}
@@ -529,7 +637,7 @@ export default function Dashboard() {
               Manage <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
-          
+
           {activeMedications.length > 0 ? (
             <div className="space-y-2.5">
               {activeMedications.slice(0, 3).map((med, index) => (
@@ -567,6 +675,7 @@ export default function Dashboard() {
           {[
             { to: "/dashboard", icon: Home, label: "Home", active: true },
             { to: "/chat", icon: MessageCircle, label: "Chat", active: false },
+            { to: "/surgery-readiness", icon: ShieldCheck, label: "Readiness", active: false },
             { to: "/pharmacy", icon: Pill, label: "Meds", active: false },
           ].map((item) => {
             const Wrapper = item.to ? Link : 'a';
