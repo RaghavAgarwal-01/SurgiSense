@@ -31,6 +31,7 @@ import MedicationSelector from "../components/ui/medication_selector";
 import AgentReportCard from "../components/ui/AgentReportCard";
 import AdherenceCard from "../components/ui/AdherenceCard";
 import ReasoningChain from "../components/ui/ReasoningChain";
+import AgentChat from "../components/ui/AgentChat";
 
 const API_BASE = "http://localhost:8000";
 const getAuthHeaders = () => {
@@ -561,11 +562,10 @@ export default function Dashboard() {
                           {bellAlerts.slice(0, 10).map((alert) => (
                             <div key={alert.id} className="px-4 py-3 hover:bg-[#D3D0BC]/10 transition-colors">
                               <div className="flex items-start gap-2.5">
-                                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                                  alert.type === 'missed_dose' ? 'bg-red-400' :
-                                  alert.type === 'low_stock' ? 'bg-amber-400' :
-                                  'bg-blue-400'
-                                }`} />
+                                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${alert.type === 'missed_dose' ? 'bg-red-400' :
+                                    alert.type === 'low_stock' ? 'bg-amber-400' :
+                                      'bg-blue-400'
+                                  }`} />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs text-[#3E435D] font-medium leading-snug">{alert.message}</p>
                                   <p className="text-[10px] text-[#9AA7B1] mt-1">
@@ -637,7 +637,23 @@ export default function Dashboard() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-5 pt-28 pb-24 space-y-6">
 
-        {/* Quick Actions */}
+        {/* NLP Agent Chat Component (Highest Priority - Interactive) */}
+        <motion.div initial="hidden" animate="visible" variants={fadeIn}>
+          <AgentChat
+            onTaskCompleted={() => {
+              fetchTasks(viewDate);
+              fetchMedicines();
+              fetchInventoryAlerts();
+            }}
+          />
+        </motion.div>
+
+        {/* Phase 3: Adherence Card (Key Metrics) */}
+        <motion.div initial="hidden" animate="visible" variants={fadeIn}>
+          <AdherenceCard />
+        </motion.div>
+
+        {/* Quick Actions (Navigation) */}
         <motion.div initial="hidden" animate="visible" variants={fadeIn} className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { href: "#timeline", icon: Calendar, label: "Timeline", color: "bg-[#3E435D]" },
@@ -658,17 +674,7 @@ export default function Dashboard() {
           })}
         </motion.div>
 
-        {/* AI Agent Workflow Report */}
-        <motion.div initial="hidden" animate="visible" variants={fadeIn}>
-          <AgentReportCard />
-        </motion.div>
-
-        {/* Phase 3: Adherence Card */}
-        <motion.div initial="hidden" animate="visible" variants={fadeIn}>
-          <AdherenceCard />
-        </motion.div>
-
-        {/* Agent Reasoning Chain */}
+        {/* Agent Reasoning Chain (Appears above tasks when triggered) */}
         <ReasoningChain
           chain={reasoningChain}
           visible={showReasoning}
@@ -681,11 +687,10 @@ export default function Dashboard() {
             <h2 className="text-[#3E435D] text-xl font-bold tracking-tight">Recovery Tasks</h2>
             <div className="flex items-center gap-3">
               {adherenceScore !== null && (
-                <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
-                  adherenceScore >= 80 ? 'bg-green-100 text-green-700' :
-                  adherenceScore >= 50 ? 'bg-amber-100 text-amber-700' :
-                  'bg-red-100 text-red-700'
-                }`}>
+                <span className={`text-xs font-bold px-2 py-1 rounded-lg ${adherenceScore >= 80 ? 'bg-green-100 text-green-700' :
+                    adherenceScore >= 50 ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                  }`}>
                   {adherenceScore}% adherence
                 </span>
               )}
@@ -838,6 +843,11 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+
+        {/* AI Agent Workflow Report (Historical logs at bottom) */}
+        <motion.div initial="hidden" animate="visible" variants={fadeIn}>
+          <AgentReportCard />
+        </motion.div>
 
       </div>
 

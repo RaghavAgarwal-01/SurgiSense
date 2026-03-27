@@ -17,6 +17,7 @@ from models import MedicalRecord, User, PatientProfile, RecoveryTask, DischargeS
 from services.medication_agent import execute_medication_completion, check_inventory_alerts, get_adherence_stats
 from services.scheduler import start_scheduler, stop_scheduler
 from services.agent_router import route_event
+from services.agent_nlp import process_natural_language
 from services.rules_ai import evaluate_patient
 from services.record_digitization import digitize_discharge_summary
 from services.speech_to_text import SpeechToTextService
@@ -988,6 +989,26 @@ def agent_event(
     if result.get("status") == "error":
         raise HTTPException(status_code=400, detail=result.get("message", "Agent error"))
     return result
+
+
+class AgentChatRequest(BaseModel):
+    message: str
+
+@app.post("/api/agent/chat")
+def agent_chat(
+    req: AgentChatRequest,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Natural Language Agent Endpoint.
+    Passes a free-form message to the LLM for intent classification,
+    routes to the underlying agent, and returns a conversational response
+    along with the reasoning chain.
+    """
+    result = process_natural_language(req.message, user.id, db)
+    return result
+
 
 
 def calculate_distance(lon1, lat1, lon2, lat2):
