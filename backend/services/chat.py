@@ -10,9 +10,15 @@ logger = logging.getLogger(__name__)
 class MedicalRAGService:
     def __init__(self):
         self.groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.embedder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+        self._embedder = None          # lazy — loads on first use
         self.index = None
         self.document_chunks = []
+
+    @property
+    def embedder(self):
+        if self._embedder is None:
+            self._embedder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+        return self._embedder
 
     def ingest_document(self, text: str):
         """Chops text, embeds it, and stores it in FAISS directly."""
