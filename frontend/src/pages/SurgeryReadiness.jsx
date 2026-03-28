@@ -8,8 +8,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import surgiLogo from "../assets/surgisense-logo.jpeg";
-
-const API_BASE = "http://localhost:8000";
+import API_BASE from "../api";
 const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 
 const fadeIn = {

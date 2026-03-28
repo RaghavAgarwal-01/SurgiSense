@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import axios from "axios"
 import { useNavigate } from "react-router-dom"
-
-const API = "http://localhost:8000"
+import API_BASE from "../api"; 
 const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` })
 
 const EMPTY_FORM = {
@@ -50,7 +49,7 @@ export default function IntakeOnboarding() {
   const woundRef = useRef()
 
   useEffect(() => {
-    axios.get(`${API}/api/my-intake`, { headers: authHeader() })
+    axios.get(`${API_BASE}/api/my-intake`, { headers: authHeader() })
       .then(res => {
         const { status, data, source, last_updated, wound_analysis } = res.data
         if (status === "prefilled" && data) {
@@ -90,7 +89,7 @@ export default function IntakeOnboarding() {
       const fd = new FormData()
       fd.append("file", pdfFile)
 
-      const res = await axios.post(`${API}/api/scan`, fd, {
+      const res = await axios.post(`${API_BASE}/api/scan`, fd, {
         headers: { ...authHeader(), "Content-Type": "multipart/form-data" },
       })
 
@@ -147,7 +146,7 @@ export default function IntakeOnboarding() {
     try {
       const fd = new FormData()
       fd.append("file", woundFile)
-      const res = await axios.post(`${API}/api/analyze-wound`, fd, {
+      const res = await axios.post(`${API_BASE}/api/analyze-wound`, fd, {
         headers: { ...authHeader(), "Content-Type": "multipart/form-data" },
       })
       setWoundAnalysis(res.data.analysis || "")
@@ -175,7 +174,7 @@ export default function IntakeOnboarding() {
     if (!validate()) return
     setSubmitting(true)
     try {
-      await axios.patch(`${API}/api/update-intake`, {
+      await axios.patch(`${API_BASE}/api/update-intake`, {
         ...form,
         wound_analysis: woundAnalysis || savedWoundAnalysis,
       }, { headers: authHeader() })
@@ -192,14 +191,14 @@ export default function IntakeOnboarding() {
     setSubmitting(true)
     try {
       // Step 1: Update Profile with core details
-      await axios.post(`${API}/api/create-profile`, {
+      await axios.post(`${API_BASE}/api/create-profile`, {
         patient_name: form.patient_name,
         surgery_type: form.surgery_type,
         surgery_date: form.surgery_date
       }, { headers: authHeader() })
 
       // Step 2: Submit the rest of the form
-      await axios.post(`${API}/api/submit-intake`, {
+      await axios.post(`${API_BASE}/api/submit-intake`, {
         ...form,
         wound_analysis: woundAnalysis,
       }, { headers: authHeader() })
