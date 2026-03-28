@@ -1,86 +1,71 @@
 import os
 import logging
-import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
+import faiss
 from groq import Groq
 
 logger = logging.getLogger(__name__)
 
+GROQ_KEY = os.getenv("GROQ_API_KEY")
+
+
 class MedicalRAGService:
     def __init__(self):
-        self.groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self._embedder = None          # lazy — loads on first use
+        self.client = Groq(api_key=GROQ_KEY)
         self.index = None
         self.document_chunks = []
 
-    @property
-    def embedder(self):
-        if self._embedder is None:
-            self._embedder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-        return self._embedder
+    def _embed(self, texts: list[str]) -> np.ndarray:
+        """Call Groq embedding endpoint."""
+        response = self.client.embeddings.create(
+            model="nomic-embed-text-v1_5",
+            input=texts,
+        )
+        vectors = [item.embedding for item in response.data]
+        return np.array(vectors, dtype="float32")
 
     def ingest_document(self, text: str):
-        """Chops text, embeds it, and stores it in FAISS directly."""
-        try:
-            chunk_size = 800
-            overlap = 100
-            self.document_chunks = []
-            
-            start = 0
-            while start < len(text):
-                end = start + chunk_size
-                self.document_chunks.append(text[start:end])
-                start = end - overlap
+        """Chunk text and build FAISS index."""
+        if not text or not text.strip():
+            return
+        # Split into ~500-char chunks with 50-char overlap
+        chunk_size, overlap = 500, 50
+        chunks = []
+        start = 0
+        while start < len(text):
+            chunks.append(text[start:start + chunk_size])
+            start += chunk_size - overlap
 
-            if not self.document_chunks:
-                return False
+        self.document_chunks = chunks
+        embeddings = self._embed(chunks)
+        dim = embeddings.shape[1]
+        self.index = faiss.IndexFlatL2(dim)
+        self.index.add(embeddings)
+        logger.info(f"RAG: indexed {len(chunks)} chunks (dim={dim})")
 
-            embeddings = self.embedder.encode(self.document_chunks)
-            vector_dimension = embeddings.shape[1]
+    def ask_question(self, question: str) -> str:
+        """Retrieve top-3 chunks and answer via Groq."""
+        if self.index is None or not self.document_chunks:
+            return "No document has been uploaded yet. Please upload a discharge summary first."
 
-            self.index = faiss.IndexFlatL2(vector_dimension)
-            self.index.add(np.array(embeddings).astype('float32'))  # type: ignore
-            
-            return True
-        except Exception as e:
-            logger.error(f"RAG Ingestion Error: {str(e)}")
-            return False
+        q_vec = self._embed([question])
+        _, indices = self.index.search(q_vec, k=min(3, len(self.document_chunks)))
+        context = "\n\n".join(
+            self.document_chunks[i] for i in indices[0] if i < len(self.document_chunks)
+        )
 
-    def ask_question(self, question: str):
-        """Finds the most relevant chunks locally and asks Groq to answer."""
-        if not self.index or not self.document_chunks:
-            return "Please upload and scan a document first."
-        
-        try:
-            question_vector = self.embedder.encode([question]).astype('float32')
-            distances, indices = self.index.search(question_vector, k=3)  # type: ignore
-            
-            retrieved_context = "\n\n".join([
-                self.document_chunks[i] for i in indices[0] if i < len(self.document_chunks)
-            ])
-            prompt = f"""You are a clinical AI assistant for SurgiSense answering questions about a patient's medical document. 
-            Use ONLY the following retrieved context to answer the doctor or patient's question. 
-            If the answer is not in the context, explicitly state "The document does not specify." Do not hallucinate.
-
-            CRITICAL INSTRUCTION: You must respond in the EXACT same language the user asked the question in. 
-            - If the user asks in English, reply in English.
-            - If the user asks in Hindi (Devanagari script), reply in Hindi.
-            - If the user asks in Hinglish (Hindi written in English alphabet, e.g., "Mera operation kab hua?"), reply in natural, conversational Hinglish.
-
-            Context:
-            {retrieved_context}
-            
-            Question: {question}
-            """
-
-            response = self.groq_client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model="llama-3.3-70b-versatile",
-                temperature=0
-            )
-            
-            return response.choices[0].message.content
-        except Exception as e:
-            logger.error(f"RAG Chat Error: {str(e)}")
-            return "An error occurred while generating the answer."
+        response = self.client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful medical assistant. Answer the patient's question "
+                        "using only the context from their discharge summary below. "
+                        "Be clear, concise, and supportive.\n\nContext:\n" + context
+                    ),
+                },
+                {"role": "user", "content": question},
+            ],
+        )
+        return response.choices[0].message.content
