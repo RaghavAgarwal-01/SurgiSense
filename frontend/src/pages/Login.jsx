@@ -14,10 +14,6 @@ export default function Login() {
 				email,
 				password,
 			})
-
-			// Clear ALL previous user's data before storing new token.
-			// Without this, user B sees user A's stale localStorage values
-			// (active meds, cached profile, etc.) on their first dashboard load.
 			localStorage.clear()
 			localStorage.setItem("token", res.data.token)
 			navigate("/intake")

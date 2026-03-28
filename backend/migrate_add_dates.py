@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 Migration script to add pdf_upload_date and next_appointment_date columns
 to the patient_profiles table.
@@ -15,18 +15,14 @@ load_dotenv()
 
 def migrate():
     """Add missing columns to patient_profiles table"""
-    # Get database URL from environment
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         print("❌ DATABASE_URL not found in .env file")
         return
     
     try:
-        # Parse the connection string
         conn = psycopg2.connect(db_url)
-        cursor = conn.cursor()
-        
-        # Check and add pdf_upload_date column
+        cursor = conn.cursor()      
         try:
             print("Adding pdf_upload_date column...")
             cursor.execute("""

@@ -28,10 +28,6 @@ from models import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
 def _parse_task_time(time_str: str, task_date: str) -> datetime | None:
     """Parse '08:00 AM' + '2026-03-27' into a datetime, or None."""
     if not time_str or not task_date:
@@ -57,9 +53,7 @@ def _days_until_empty(med: Medicine) -> int | None:
     qty = med.current_quantity or 0
     dose = med.dose_amount or 1
     freq = (med.frequency or "").lower()
-
-    # Parse frequency into doses-per-day
-    doses_per_day = 1  # default
+    doses_per_day = 1  
     if "twice" in freq or "2" in freq or "bid" in freq:
         doses_per_day = 2
     elif "three" in freq or "3" in freq or "tid" in freq:
@@ -71,9 +65,6 @@ def _days_until_empty(med: Medicine) -> int | None:
     if daily_consumption <= 0:
         return None
     return qty // daily_consumption
-
-
-# ── Main Orchestrator ────────────────────────────────────────────────────────
 
 def execute_medication_completion(
     user_id: int,
@@ -95,7 +86,7 @@ def execute_medication_completion(
     """
     now = datetime.now()
     today_str = date_type.today().isoformat()
-    chain = []  # reasoning chain — records every agent decision
+    chain = []  
 
     result = {
         "status": "success",
@@ -108,7 +99,6 @@ def execute_medication_completion(
         "reasoning_chain": chain,
     }
 
-    # ── Step 1: Verify ───────────────────────────────────────────────────
     chain.append({"step": 1, "action": "Verifying task", "status": "running", "detail": f"Looking up task #{task_id} for user #{user_id}", "emoji": "🔍"})
 
     task = db.query(RecoveryTask).filter(
@@ -137,15 +127,12 @@ def execute_medication_completion(
         "is_critical": getattr(task, "is_critical", 0),
     }
 
-    # ── Step 2: Mark Complete ────────────────────────────────────────────
     chain.append({"step": 2, "action": "Marking complete", "status": "running", "detail": "Setting task status to completed", "emoji": "✅"})
     task.status = "completed"
     db.flush()
     chain[-1]["status"] = "done"
     chain[-1]["detail"] = f"Task #{task_id} marked as completed"
     logger.info(f"Agent: task {task_id} marked completed for user {user_id}")
-
-    # ── Step 3: Deduct Inventory (only for medication tasks) ─────────────
     is_medication_task = "medication" in (task.title or "").lower()
 
     if is_medication_task:
@@ -210,8 +197,6 @@ def execute_medication_completion(
             chain[-1]["detail"] = "No matching medicines found for deduction"
     else:
         chain.append({"step": 3, "action": "Deducting inventory", "status": "skipped", "detail": "Non-medication task — no inventory change", "emoji": "💊"})
-
-    # ── Step 4: Log Adherence ────────────────────────────────────────────
     chain.append({"step": 4, "action": "Logging adherence", "status": "running", "detail": "Calculating timing accuracy...", "emoji": "📋"})
 
     scheduled_dt = _parse_task_time(task.time, task.task_date or today_str)
@@ -255,8 +240,6 @@ def execute_medication_completion(
         "scheduled": task.time,
         "completed": now.strftime("%I:%M %p"),
     }
-
-    # ── Step 5: Check Inventory & Generate Alerts ────────────────────────
     chain.append({"step": 5, "action": "Checking inventory levels", "status": "running", "detail": "Scanning all medications for low stock...", "emoji": "📦"})
 
     alerts_generated = 0
@@ -307,7 +290,6 @@ def execute_medication_completion(
         chain[-1]["status"] = "done"
         chain[-1]["detail"] = "All medications well-stocked"
 
-    # ── Step 6: Calculate Today's Adherence Score ────────────────────────
     chain.append({"step": 6, "action": "Computing adherence score", "status": "running", "detail": "Counting today's critical tasks...", "emoji": "📊"})
 
     total_critical = db.query(RecoveryTask).filter(
@@ -346,9 +328,6 @@ def execute_medication_completion(
     logger.info(f"Agent: pipeline complete for task {task_id} — {result['message']}")
     return result
 
-
-# ── Phase 2: Inventory Intelligence Agent ────────────────────────────────────
-
 def check_inventory_alerts(user_id: int, db: Session) -> dict:
     """
     Proactive inventory scanner — designed to run on every dashboard load.
@@ -380,8 +359,6 @@ def check_inventory_alerts(user_id: int, db: Session) -> dict:
         days_left = _days_until_empty(med)
         remaining = med.current_quantity or 0
         total = med.total_quantity or 0
-
-        # Determine severity
         if days_left is not None and days_left <= 1:
             severity = "critical"
         elif days_left is not None and days_left <= 3:
@@ -403,8 +380,6 @@ def check_inventory_alerts(user_id: int, db: Session) -> dict:
             "severity": severity,
             "percent_left": round((remaining / total) * 100) if total > 0 else 0,
         })
-
-        # Create alerts for critical/warning meds (if not already alerted)
         if severity in ("critical", "warning"):
             existing = db.query(AgentAlert).filter(
                 AgentAlert.user_id == user_id,
@@ -453,7 +428,6 @@ def check_inventory_alerts(user_id: int, db: Session) -> dict:
     if new_alerts:
         db.commit()
 
-    # Build summary
     critical_count = sum(1 for m in med_reports if m["severity"] == "critical")
     warning_count = sum(1 for m in med_reports if m["severity"] == "warning")
 
@@ -472,10 +446,6 @@ def check_inventory_alerts(user_id: int, db: Session) -> dict:
         "alerts": new_alerts,
         "summary": summary,
     }
-
-
-# ── Phase 3: Compliance Agent ────────────────────────────────────────────────
-
 def get_adherence_stats(user_id: int, days: int, db: Session) -> dict:
     """
     Compliance analytics — queries AdherenceLog for the last N days.
@@ -497,8 +467,6 @@ def get_adherence_stats(user_id: int, days: int, db: Session) -> dict:
 
     today = date_type.today()
     start_date = today - timedelta(days=days - 1)
-
-    # ── 1. Fetch all adherence logs in the window ─────────────────────────
     logs = (
         db.query(AdherenceLog)
         .filter(
@@ -508,8 +476,6 @@ def get_adherence_stats(user_id: int, days: int, db: Session) -> dict:
         )
         .all()
     )
-
-    # ── 2. Fetch all critical tasks in the window ─────────────────────────
     all_tasks = (
         db.query(RecoveryTask)
         .filter(
@@ -529,8 +495,6 @@ def get_adherence_stats(user_id: int, days: int, db: Session) -> dict:
         if total_critical > 0
         else 100
     )
-
-    # ── 3. Per-medication breakdown ───────────────────────────────────────
     all_meds = db.query(Medicine).filter(Medicine.user_id == user_id).all()
     med_name_map = {m.id: m.name for m in all_meds}
 
@@ -558,13 +522,11 @@ def get_adherence_stats(user_id: int, days: int, db: Session) -> dict:
             "percent": pct,
         })
 
-    # ── 4. Most-missed time slot ──────────────────────────────────────────
     missed_times = Counter()
     for log in logs:
         if log.action == "missed" and log.scheduled_time:
             missed_times[log.scheduled_time] += 1
 
-    # Also count late logs as partially missed
     for log in logs:
         if log.action == "late" and log.scheduled_time:
             missed_times[log.scheduled_time] += 0.5
@@ -573,20 +535,18 @@ def get_adherence_stats(user_id: int, days: int, db: Session) -> dict:
     if missed_times:
         most_missed_slot = missed_times.most_common(1)[0][0]
 
-    # ── 5. Streak counter (consecutive days with 100% adherence) ──────────
     streak = 0
     for day_offset in range(days):
         check_date = (today - timedelta(days=day_offset)).isoformat()
         day_tasks = [t for t in all_tasks if t.task_date == check_date]
         if not day_tasks:
-            continue  # skip days with no tasks
+            continue 
         all_done = all(t.status == "completed" for t in day_tasks)
         if all_done:
             streak += 1
         else:
             break
 
-    # ── 6. Daily breakdown ────────────────────────────────────────────────
     daily_breakdown = []
     for day_offset in range(days):
         check_date = (today - timedelta(days=days - 1 - day_offset)).isoformat()

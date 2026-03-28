@@ -82,8 +82,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
 
         # Create JWT token
         jwt_token = create_token({"user_id": db_user.id})
-        
-        # Redirect to frontend with token
+
         return RedirectResponse(
             url=f"http://localhost:5173/oauth-success?token={jwt_token}",
             status_code=302

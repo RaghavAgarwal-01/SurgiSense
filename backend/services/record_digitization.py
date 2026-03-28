@@ -1,5 +1,3 @@
-# backend/services/record_digitization.py
-
 import os
 import json
 from groq import Groq
@@ -63,15 +61,12 @@ Discharge Summary:
             "raw_output": content
         }
 
-    # Normalize for frontend
     normalized = {
         "procedure": ai_json.get("procedure"),
         "doctor": ai_json.get("follow_up", {}).get("doctor"),
         "follow_up_date": ai_json.get("follow_up", {}).get("date"),
         "medications": ai_json.get("medications", [])
     }
-
-    # ENSURE MEDICATIONS HAVE PROPER 'name' FIELD FOR FRONTEND
     if normalized["medications"]:
         normalized["medications"] = [
             {
@@ -79,7 +74,7 @@ Discharge Summary:
                 "dosage": med.get("dosage") or med.get("dose") or "",
                 "frequency": med.get("frequency") or "",
                 "duration": med.get("duration") or "",
-                **med  # Keep all original fields as well
+                **med 
             }
             for med in normalized["medications"]
         ]

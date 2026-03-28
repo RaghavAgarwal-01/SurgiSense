@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
+import surgiLogo from "../assets/surgisense-logo.jpeg";
 
 const API_BASE = "http://localhost:8000";
 const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -139,8 +140,8 @@ export default function SurgeryReadiness() {
         <div className="max-w-7xl mx-auto px-5 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Link to="/" className="w-9 h-9 bg-[#CBC3A5] rounded-xl flex items-center justify-center hover:scale-105 transition-transform">
-                <Heart className="w-5 h-5 text-[#3E435D]" />
+              <Link to="/" className="w-11 h-11 hover:scale-105 transition-transform flex-shrink-0">
+                <img src={surgiLogo} alt="SurgiSense" className="w-full h-full object-contain" style={{mixBlendMode:'screen', filter:'brightness(1.15) contrast(1.05)'}} />
               </Link>
               <div>
                 <h1 className="text-[#D3D0BC] text-base font-semibold leading-tight">SurgiSense</h1>

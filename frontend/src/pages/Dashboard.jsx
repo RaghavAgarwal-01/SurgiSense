@@ -20,10 +20,9 @@ import {
   ShieldCheck,
   LogOut,
   Bell,
+  Bot,
 } from "lucide-react";
 import { Progress } from "../components/ui/Progress";
-import ReactMarkdown from 'react-markdown';
-import Vision from "../Vision";
 import axios from "axios";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,6 +31,7 @@ import AgentReportCard from "../components/ui/AgentReportCard";
 import AdherenceCard from "../components/ui/AdherenceCard";
 import ReasoningChain from "../components/ui/ReasoningChain";
 import AgentChat from "../components/ui/AgentChat";
+import surgiLogo from "../assets/surgisense-logo.jpeg";
 
 const API_BASE = "http://localhost:8000";
 const getAuthHeaders = () => {
@@ -41,6 +41,19 @@ const getAuthHeaders = () => {
       Authorization: `Bearer ${token}`
     }
   };
+};
+
+const fmtOverdue = (mins) => {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h > 0 && m > 0) return `${h} hr ${m} min`;
+  if (h > 0) return `${h} hr`;
+  return `${m} min`;
+};
+
+// Reformat stored alert messages: "417 min overdue" → "6 hr 57 min overdue"
+const reformatAlertMessage = (msg) => {
+  if (!msg) return msg;
+  return msg.replace(/(\d+)\s*min overdue/g, (_, m) => `${fmtOverdue(Number(m))} overdue`);
 };
 
 const fadeIn = {
@@ -65,8 +78,6 @@ export default function Dashboard() {
   const lastScrollYRef = useRef(0);
   const headerRef = useRef(null);
   const [profile, setProfile] = useState(null);
-  const [woundAnalysis, setWoundAnalysis] = useState(null);
-  const [woundPreview, setWoundPreview] = useState(null);
 
   const [pendingMedsData, setPendingMedsData] = useState(null);
   const [dbMedications, setDbMedications] = useState(null);
@@ -86,10 +97,8 @@ export default function Dashboard() {
   const [reasoningChain, setReasoningChain] = useState([]);
   const [showReasoning, setShowReasoning] = useState(false);
 
-  const handleWoundAnalysis = (analysis, preview) => {
-    setWoundAnalysis(analysis);
-    setWoundPreview(preview);
-  };
+  // ── Agent chat open state ─────────────────────────────────────────────
+  const [agentChatOpen, setAgentChatOpen] = useState(false);
 
   const getWoundSeverity = (text) => {
     if (!text) return null;
@@ -103,14 +112,12 @@ export default function Dashboard() {
     return { score, barColor: 'bg-[#d4183d]', bgColor: 'bg-[#d4183d]/10', textColor: 'text-[#d4183d]', label: 'Critical Alert' };
   };
 
-  const woundSeverity = getWoundSeverity(woundAnalysis);
 
   const [tasks, setTasks] = useState([
     { id: 'placeholder', title: "Upload Discharge Summary to generate today's schedule.", time: "--", status: "pending", type: "info" }
   ]);
 
   const [viewDate, setViewDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [readinessReport, setReadinessReport] = useState(null);
   const notifiedTaskIds = useRef(new Set());
 
   const fetchUserRecords = async () => {
@@ -140,16 +147,6 @@ export default function Dashboard() {
     }
   };
 
-  const fetchReadiness = async () => {
-  try {
-    const res = await axios.get(`${API_BASE}/api/intake-report`, getAuthHeaders());
-    if (res.data && res.data.status !== 'no_report') {
-      setReadinessReport(res.data);
-    }
-  } catch (err) {
-    // silently skip if not available
-  }
-};
 
 const fetchProfile = async () => {
     try {
@@ -229,7 +226,7 @@ const fetchProfile = async () => {
           if (notifiedTaskIds.current.has(task.id)) return;
           notifiedTaskIds.current.add(task.id);
           new Notification('⚠️ Overdue task — SurgiSense', {
-            body: `${task.title} was due at ${task.time} · ${task.minutes_overdue} min ago`,
+            body: `${task.title} was due at ${task.time} · ${fmtOverdue(task.minutes_overdue)} ago`,
             icon: '/favicon.ico',
             tag: `task-${task.id}`,
           });
@@ -252,7 +249,6 @@ const fetchProfile = async () => {
     fetchUserRecords();
     fetchProfile();
     fetchTasks(new Date().toISOString().slice(0, 10));
-    fetchReadiness();
     fetchMedicines();
     fetchInventoryAlerts();
 
@@ -525,8 +521,8 @@ const fetchProfile = async () => {
         <div className="max-w-7xl mx-auto px-5 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Link to="/" className="w-9 h-9 bg-[#CBC3A5] rounded-xl flex items-center justify-center hover:scale-105 transition-transform">
-                <Heart className="w-5 h-5 text-[#3E435D]" />
+              <Link to="/" className="w-11 h-11 hover:scale-105 transition-transform flex-shrink-0">
+                <img src={surgiLogo} alt="SurgiSense" className="w-full h-full object-contain" style={{mixBlendMode:'screen', filter:'brightness(1.15) contrast(1.05)'}} />
               </Link>
               <div>
                 <h1 className="text-[#D3D0BC] text-base font-semibold leading-tight">{recoveryData.patientName}</h1>
@@ -580,7 +576,7 @@ const fetchProfile = async () => {
                                       'bg-blue-400'
                                   }`} />
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-xs text-[#3E435D] font-medium leading-snug">{alert.message}</p>
+                                  <p className="text-xs text-[#3E435D] font-medium leading-snug">{reformatAlertMessage(alert.message)}</p>
                                   <p className="text-[10px] text-[#9AA7B1] mt-1">
                                     {alert.created_at ? new Date(alert.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
                                   </p>
@@ -604,6 +600,7 @@ const fetchProfile = async () => {
               <div className="hidden md:flex items-center gap-1">
                 <Link to="/dashboard" className="px-3 py-1.5 rounded-lg text-[#CBC3A5] text-sm font-medium bg-[#CBC3A5]/10">Home</Link>
                 <Link to="/chat" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Chat</Link>
+                <Link to="/wound-analysis" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Wound Check</Link>
                 <Link to="/surgery-readiness" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Readiness</Link>
                 <Link to="/pharmacy" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Pharmacy</Link>
                 <button onClick={handleLogout} className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors flex items-center gap-2">
@@ -650,42 +647,12 @@ const fetchProfile = async () => {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-5 pt-28 pb-24 space-y-6">
 
-        {/* NLP Agent Chat Component (Highest Priority - Interactive) */}
-        <motion.div initial="hidden" animate="visible" variants={fadeIn}>
-          <AgentChat
-            onTaskCompleted={() => {
-              fetchTasks(viewDate);
-              fetchMedicines();
-              fetchInventoryAlerts();
-            }}
-          />
-        </motion.div>
-
         {/* Phase 3: Adherence Card (Key Metrics) */}
         <motion.div initial="hidden" animate="visible" variants={fadeIn}>
           <AdherenceCard />
         </motion.div>
 
-        {/* Quick Actions (Navigation) */}
-        <motion.div initial="hidden" animate="visible" variants={fadeIn} className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { href: "#timeline", icon: Calendar, label: "Timeline", color: "bg-[#3E435D]" },
-            { href: "#wound", icon: Camera, label: "Wound Check", color: "bg-[#3E435D]" },
-            { to: "/chat", icon: MessageCircle, label: "AI Chat", color: "bg-[#3E435D]" },
-            { to: "/pharmacy", icon: Pill, label: "Pharmacy", color: "bg-[#3E435D]" },
-          ].map((item) => {
-            const Wrapper = item.to ? Link : 'a';
-            const wrapperProps = item.to ? { to: item.to } : { href: item.href };
-            return (
-              <Wrapper key={item.label} {...wrapperProps} className="group bg-white/80 backdrop-blur-sm rounded-2xl p-4 flex flex-col items-center gap-2.5 border border-[#3E435D]/5 hover:bg-white hover:shadow-lg hover:shadow-[#3E435D]/5 transition-all duration-300 hover:-translate-y-0.5">
-                <div className={`${item.color} w-11 h-11 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform`}>
-                  <item.icon className="w-5 h-5 text-[#CBC3A5]" />
-                </div>
-                <span className="text-[#3E435D] font-medium text-sm">{item.label}</span>
-              </Wrapper>
-            );
-          })}
-        </motion.div>
+
 
         {/* Agent Reasoning Chain (Appears above tasks when triggered) */}
         <ReasoningChain
@@ -803,101 +770,9 @@ const fetchProfile = async () => {
           </div>
         </motion.section>
 
-        {/* Wound Check */}
-        <section id="wound" className="scroll-mt-28 bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-[#3E435D]/5">
-          <Vision onAnalysisComplete={handleWoundAnalysis} />
-          {woundAnalysis && (
-            <div className="mt-4 p-4 rounded-xl bg-[#D3D0BC]/10 border border-[#3E435D]/10 text-sm text-[#3E435D]">
-              <h4 className="font-bold mb-2">Analysis Results:</h4>
-              <ReactMarkdown>{woundAnalysis}</ReactMarkdown>
-            </div>
-          )}
-        </section>
 
-        {/* Surgery Readiness Card */}
-        {readinessReport && (() => {
-          const trail = readinessReport.audit_trail || [];
-          const readStep = trail.find(s => s.step === 'readiness_evaluation');
-          const readiness = readStep?.result;
-          if (!readiness) return null;
-          const verdictMap = {
-            READY:       { label: 'Ready for Surgery',          cls: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-400', border: 'border-emerald-200' },
-            CONDITIONAL: { label: 'Conditional — Review Needed', cls: 'bg-amber-100 text-amber-700',   dot: 'bg-amber-400',   border: 'border-amber-200'   },
-            NOT_READY:   { label: 'Not Ready',                  cls: 'bg-red-100 text-red-600',        dot: 'bg-red-400',     border: 'border-red-200'     },
-            INCOMPLETE:  { label: 'Incomplete Vitals',          cls: 'bg-[#D3D0BC]/40 text-[#3E435D]', dot: 'bg-[#9AA7B1]',  border: 'border-[#CBC3A5]/50'},
-          };
-          const v = verdictMap[readiness.verdict] || verdictMap.INCOMPLETE;
-          const passed = readiness.criteria?.filter(c => c.passed).length || 0;
-          const total  = readiness.criteria?.length || 0;
-          const wfBadge = {
-            APPROVED:        { label: 'Approved',        cls: 'bg-emerald-100 text-emerald-700' },
-            REQUIRES_REVIEW: { label: 'Requires Review', cls: 'bg-amber-100 text-amber-700'    },
-            DEFER:           { label: 'Deferred',        cls: 'bg-red-100 text-red-600'         },
-          }[readinessReport.workflow_status];
-          return (
-            <section className={`bg-white/80 backdrop-blur-sm rounded-2xl p-5 border ${v.border} border-opacity-60`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 bg-[#3E435D] rounded-xl flex items-center justify-center">
-                    <ShieldCheck className="w-5 h-5 text-[#CBC3A5]" />
-                  </div>
-                  <div>
-                    <h2 className="text-[#3E435D] text-base font-bold leading-tight">Surgery Readiness</h2>
-                    <p className="text-[#9AA7B1] text-xs">From your intake assessment</p>
-                  </div>
-                </div>
-                <Link to="/surgery-readiness" className="text-xs text-[#9AA7B1] hover:text-[#3E435D] font-semibold transition-colors">
-                  Full report →
-                </Link>
-              </div>
 
-              {/* Verdict pill + workflow badge */}
-              <div className="flex items-center gap-2 mb-3 flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-2 h-2 rounded-full ${v.dot}`} />
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${v.cls}`}>{v.label}</span>
-                </div>
-                {wfBadge && (
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${wfBadge.cls}`}>{wfBadge.label}</span>
-                )}
-              </div>
 
-              {/* Criteria progress bar */}
-              {total > 0 && (
-                <div className="mb-3">
-                  <div className="flex justify-between text-[10px] text-[#9AA7B1] font-medium mb-1">
-                    <span>Clinical criteria</span><span>{passed}/{total} passed</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-[#D3D0BC]/50 rounded-full overflow-hidden">
-                    <div className={`h-1.5 rounded-full transition-all duration-700 ${v.dot}`}
-                      style={{ width: `${total ? (passed / total) * 100 : 0}%` }} />
-                  </div>
-                </div>
-              )}
-
-              {/* Failed criteria pills */}
-              {readiness.flags?.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {readiness.flags.map((f, i) => (
-                    <span key={i} className="text-[10px] bg-red-50 text-red-600 border border-red-100 px-2 py-0.5 rounded-full font-medium">
-                      ✗ {f}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Guardrails */}
-              {readinessReport.guardrails?.length > 0 && (
-                <div className="mt-2.5 p-2.5 rounded-lg bg-amber-50 border border-amber-100">
-                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wide mb-1">Guardrails</p>
-                  {readinessReport.guardrails.map((g, i) => (
-                    <p key={i} className="text-[10px] text-amber-600 leading-snug">• {g}</p>
-                  ))}
-                </div>
-              )}
-            </section>
-          );
-        })()}
 
         {/* UPGRADED Medications Section */}
         <section className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-[#3E435D]/5">
@@ -996,6 +871,52 @@ const fetchProfile = async () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Floating Agent Chat Popup ──────────────────────────────────── */}
+      <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-3">
+        {/* Chat window */}
+        <AnimatePresence>
+          {agentChatOpen && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 16 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="w-[340px] sm:w-[380px] shadow-2xl shadow-[#3E435D]/20 rounded-2xl overflow-hidden"
+            >
+              <AgentChat
+                onTaskCompleted={() => {
+                  fetchTasks(viewDate);
+                  fetchMedicines();
+                  fetchInventoryAlerts();
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Toggle button */}
+        <button
+          onClick={() => setAgentChatOpen(prev => !prev)}
+          className="w-14 h-14 rounded-full bg-[#3E435D] text-[#CBC3A5] shadow-xl shadow-[#3E435D]/30 flex items-center justify-center hover:bg-[#4a5070] active:scale-95 transition-all relative"
+        >
+          <AnimatePresence mode="wait">
+            {agentChatOpen ? (
+              <motion.span key="close" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.15 }}>
+                <X className="w-6 h-6" />
+              </motion.span>
+            ) : (
+              <motion.span key="open" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.15 }}>
+                <Bot className="w-6 h-6" />
+              </motion.span>
+            )}
+          </AnimatePresence>
+          {/* Unread pulse ring when closed and there are alerts */}
+          {!agentChatOpen && bellAlerts.length > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+          )}
+        </button>
+      </div>
 
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-[#3E435D]/10 px-4 py-2.5 z-40">

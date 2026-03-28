@@ -1,14 +1,6 @@
-# backend/models.py  (updated — add IntakeRecord)
-#
-# Changes from original:
-#   • Added IntakeRecord model to store full intake + agent audit report
-#   • Added age, gender, icd10_code, cpt_code, payer_id to PatientProfile
-#   • All existing models unchanged
-
 from sqlalchemy import Column, Integer, String, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from database import Base
-
 
 class User(Base):
     __tablename__ = "users"
@@ -55,8 +47,8 @@ class PatientProfile(Base):
     recovery_days_total = Column(Integer, default=90)
     
     # Dates for task scheduling ranges
-    pdf_upload_date      = Column(String, nullable=True)  # YYYY-MM-DD: when PDF was uploaded
-    next_appointment_date = Column(String, nullable=True)  # YYYY-MM-DD: next appointment (post-op)
+    pdf_upload_date      = Column(String, nullable=True)  
+    next_appointment_date = Column(String, nullable=True) 
 
     user = relationship("User", back_populates="profile")
 
@@ -70,8 +62,8 @@ class RecoveryTask(Base):
     title       = Column(String)
     time        = Column(String)
     status      = Column(String, default="pending")
-    task_date   = Column(String, nullable=True)   # YYYY-MM-DD — which day this task belongs to
-    is_critical = Column(Integer, default=0)       # 1 = critical, triggers 2hr notification
+    task_date   = Column(String, nullable=True)   
+    is_critical = Column(Integer, default=0)   
 
 
 class IntakeRecord(Base):
@@ -197,6 +189,6 @@ class AgentAlert(Base):
 
     alert_type      = Column(String, nullable=False)
     message         = Column(String, nullable=False)
-    data_json       = Column(Text, nullable=True)          # JSON payload with extra context
-    is_read         = Column(Integer, default=0)           # 0 = unread, 1 = read
+    data_json       = Column(Text, nullable=True)          
+    is_read         = Column(Integer, default=0)
     created_at      = Column(String, nullable=False)

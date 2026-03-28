@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Heart, Shield, MessageCircle, ArrowRight, CheckCircle, Sparkles, Camera, FileText, Mic } from "lucide-react";
+import surgiLogo from "../assets/surgisense-logo.jpeg";
 import { motion } from "framer-motion";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback.jsx";
 
@@ -53,8 +54,8 @@ export default function Landing() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#3E435D]/95 backdrop-blur-md border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 bg-[#CBC3A5] rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
-              <Heart className="w-5 h-5 text-[#3E435D]" />
+            <div className="w-11 h-11 group-hover:scale-105 transition-transform flex-shrink-0">
+              <img src={surgiLogo} alt="SurgiSense" className="w-full h-full object-contain" style={{mixBlendMode:'screen', filter:'brightness(1.15) contrast(1.05)'}} />
             </div>
             <span className="text-[#D3D0BC] text-xl font-bold tracking-tight">SurgiSense</span>
           </Link>
@@ -98,12 +99,6 @@ export default function Landing() {
                 >
                   Start Recovery
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-                </Link>
-                <Link
-                  to="/record-digitization"
-                  className="border-2 border-[#3E435D]/20 text-[#3E435D] px-7 py-3.5 rounded-xl font-semibold text-base hover:bg-[#3E435D] hover:text-[#D3D0BC] hover:border-[#3E435D] transition-all text-center"
-                >
-                  Upload Records
                 </Link>
               </motion.div>
             </motion.div>

@@ -12,8 +12,6 @@ const params = new URLSearchParams(window.location.search)
 const token = params.get("token")
 
 if(token){
-
-// Clear ALL previous user data before storing the new OAuth token.
 localStorage.clear()
 localStorage.setItem("token",token)
 navigate("/intake")

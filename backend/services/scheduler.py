@@ -37,6 +37,18 @@ END_OF_DAY_MINUTE = 55                # minute at which to run end-of-day sweep
 _shutdown_event = threading.Event()
 
 
+def _fmt_overdue(minutes: float) -> str:
+    """Return human-readable overdue duration, e.g. '2 hr 17 min' or '45 min'."""
+    total = int(minutes)
+    hours, mins = divmod(total, 60)
+    if hours > 0 and mins > 0:
+        return f"{hours} hr {mins} min"
+    elif hours > 0:
+        return f"{hours} hr"
+    else:
+        return f"{mins} min"
+
+
 def _parse_task_time(time_str: str, task_date: str) -> datetime | None:
     """Parse '08:00 AM' + '2026-03-27' into a datetime, or None."""
     if not time_str or not task_date:
@@ -95,14 +107,14 @@ def _check_overdue_tasks(db) -> int:
                 severity = "critical"
                 alert_type = "missed_dose"
                 msg = (
-                    f"🚨 CRITICAL: \"{task.title}\" is {int(minutes_overdue)} min overdue! "
+                    f"🚨 CRITICAL: \"{task.title}\" is {_fmt_overdue(minutes_overdue)} overdue! "
                     f"Scheduled at {task.time}. Please take action immediately."
                 )
             else:
                 severity = "warning"
                 alert_type = "missed_dose"
                 msg = (
-                    f"⏰ \"{task.title}\" is {int(minutes_overdue)} min overdue. "
+                    f"⏰ \"{task.title}\" is {_fmt_overdue(minutes_overdue)} overdue. "
                     f"Scheduled at {task.time}."
                 )
 

@@ -1,14 +1,3 @@
-# backend/intake_routes.py
-#
-# Add this router to main.py with:
-#   from intake_routes import router as intake_router
-#   app.include_router(intake_router, prefix="/api")
-#
-# New endpoints:
-#   POST /api/extract-intake      — PDF → auto-filled form fields
-#   POST /api/submit-intake       — Full intake + agent workflow → audit report
-#   GET  /api/intake-report       — Fetch the latest agent report for the user
-#   GET  /api/audit-trail/{id}    — Fetch a specific audit report by ID
 
 import json
 import logging
@@ -27,13 +16,6 @@ from services.intake_agent import extract_intake_from_pdf, run_intake_agent
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-
-# ─── DB model for intake + agent reports ─────────────────────────────────────
-
-
-
-
-# ─── Pydantic schema for the intake form submission ───────────────────────────
 
 class IntakeSubmission(BaseModel):
     patient_name:   str
@@ -54,10 +36,7 @@ class IntakeSubmission(BaseModel):
     blood_sugar:    str = ""
     notes:          str = ""
     wound_analysis: str = ""
-    next_appointment_date: str = ""  # YYYY-MM-DD: for post-op task scheduling
-
-
-# ─── Endpoints ────────────────────────────────────────────────────────────────
+    next_appointment_date: str = "" 
 
 @router.post("/extract-intake")
 async def extract_intake(
@@ -74,12 +53,10 @@ async def extract_intake(
     try:
         content = await file.read()
 
-        # Allow PDF or plain text documents
         if file.content_type == "application/pdf":
             file_bytes = content
         else:
-            # Treat as UTF-8 text — wrap in bytes for the extractor
-            file_bytes = content  # extract_text_from_pdf handles this gracefully
+            file_bytes = content  
 
         extracted = extract_intake_from_pdf(file_bytes)
         return {"status": "ok", **extracted}
@@ -108,10 +85,8 @@ async def submit_intake(
         intake_dict = payload.dict()
         wound_analysis = intake_dict.pop("wound_analysis", "")
 
-        # Run the AI agent orchestration
         report = run_intake_agent(intake_dict, wound_analysis=wound_analysis)
 
-        # Persist intake + report
         record = IntakeRecord(
             user_id=user.id,
             intake_json=json.dumps(intake_dict),
@@ -119,8 +94,6 @@ async def submit_intake(
         )
         db.add(record)
 
-        # Also update the existing PatientProfile for backward compatibility
-        # with Dashboard, RAG chatbot, and task generation
         from models import PatientProfile
         from datetime import date as date_type
         
@@ -153,10 +126,9 @@ async def submit_intake(
             from datetime import date as date_type, timedelta
             from models import RecoveryTask
 
-            # Build document text from intake fields for the LLM prompt
+    
             doc_text = json.dumps(intake_dict)
 
-            # Ask Groq to generate a task template
             import os
             from groq import Groq
             groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -189,8 +161,6 @@ Patient intake data:
 
             if template:
                 today = date_type.today()
-                
-                # Determine date range based on phase
                 surgery_date = None
                 if payload.surgery_date:
                     try:
@@ -201,11 +171,10 @@ Patient intake data:
                 phase = payload.surgery_phase or "post"
                 
                 if phase == "pre" and surgery_date:
-                    # Pre-op: from today (PDF upload date) until surgery date
+    
                     start_date = today
                     end_date = surgery_date
                 else:
-                    # Post-op: from today until next appointment or 14 days
                     start_date = today
                     if payload.next_appointment_date:
                         try:
@@ -215,14 +184,12 @@ Patient intake data:
                     else:
                         end_date = today + timedelta(days=14)
 
-                # Wipe any existing tasks in the date range
                 db.query(RecoveryTask).filter(
                     RecoveryTask.user_id == user.id,
                     RecoveryTask.task_date >= start_date.isoformat(),
                     RecoveryTask.task_date <= end_date.isoformat()
                 ).delete(synchronize_session=False)
 
-                # Stamp template onto every day in the range
                 for day_offset in range((end_date - start_date).days + 1):
                     day_str = (start_date + timedelta(days=day_offset)).isoformat()
                     for task in template:
@@ -240,7 +207,6 @@ Patient intake data:
 
         except Exception as task_err:
             logger.error(f"submit-intake task generation failed: {task_err}")
-            # Don't fail the whole request — intake was saved successfully
 
         return {
             "status":          "ok",
@@ -358,7 +324,6 @@ def get_my_intake(
         except Exception as e:
             logger.error(f"my-intake parse error: {e}")
 
-    # Fallback: old-style PatientProfile (name + surgery_type + date only)
     from models import PatientProfile
     profile = db.query(PatientProfile).filter(PatientProfile.user_id == user.id).first()
     if profile:
@@ -389,8 +354,6 @@ def get_my_intake(
             "wound_analysis":  "",
             "workflow_status": "",
         }
-
-    # First-time user — no data at all
     return {"status": "empty", "data": {}}
 
 
@@ -419,7 +382,6 @@ async def update_intake(
 
     if latest:
         # Step 1: merge submitted fields over existing — unconditionally,
-        # so cleared fields never revert to old values.
         try:
             existing = json.loads(latest.intake_json)
         except Exception:
@@ -437,7 +399,6 @@ async def update_intake(
                 wound_analysis = ""
 
         # Step 3: re-run the full agent on the merged data so report_json
-        # always reflects the latest ICD code, vitals, CPT, etc.
         new_report = run_intake_agent(merged, wound_analysis=wound_analysis)
         latest.report_json = json.dumps(new_report)
 

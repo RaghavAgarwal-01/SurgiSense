@@ -49,7 +49,6 @@ export default function IntakeOnboarding() {
   const pdfRef = useRef()
   const woundRef = useRef()
 
-  // ── on mount: load saved data ─────────────────────────────────────────────
   useEffect(() => {
     axios.get(`${API}/api/my-intake`, { headers: authHeader() })
       .then(res => {
@@ -91,14 +90,11 @@ export default function IntakeOnboarding() {
       const fd = new FormData()
       fd.append("file", pdfFile)
 
-      // Hit /api/scan — persists DischargeSummary + Medicines to DB, and auto-generates tasks in background
       const res = await axios.post(`${API}/api/scan`, fd, {
         headers: { ...authHeader(), "Content-Type": "multipart/form-data" },
       })
 
       const d = res.data?.data || res.data || {}
-
-      // Resilient mapping with fallbacks
       const merged = {
         patient_name: d.patient_name || d.name || "",
         age: (d.age != null) ? String(d.age) : "",
