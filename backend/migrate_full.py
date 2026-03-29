@@ -82,6 +82,20 @@ CREATE_TABLES = [
         created_at     VARCHAR
     )
     """,
+    # medicines — must exist before medication_logs references it
+    """
+    CREATE TABLE IF NOT EXISTS medicines (
+        id               SERIAL PRIMARY KEY,
+        summary_id       INTEGER REFERENCES discharge_summaries(id),
+        user_id          INTEGER REFERENCES users(id),
+        name             VARCHAR NOT NULL,
+        dosage           VARCHAR,
+        frequency        VARCHAR,
+        total_quantity   INTEGER,
+        current_quantity INTEGER,
+        dose_amount      INTEGER DEFAULT 1
+    )
+    """,
     # medication_logs
     """
     CREATE TABLE IF NOT EXISTS medication_logs (
