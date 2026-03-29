@@ -1,5 +1,7 @@
 # SurgiSense
 
+**🌍 Live Demo:** [https://surgi-sense.vercel.app/](https://surgi-sense.vercel.app/)
+
 > AI-powered surgical recovery platform — from discharge to full recovery, guided by intelligent agents.
 
 SurgiSense digitises discharge summaries, generates personalised day-by-day recovery schedules, tracks medication adherence, monitors wound healing through computer vision, and surfaces real-time alerts when a patient falls behind — all through a multi-agent backend and a mobile-first React frontend.
@@ -21,6 +23,7 @@ SurgiSense digitises discharge summaries, generates personalised day-by-day reco
   - [Components](#components)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
+- [Deployment](#deployment)
 
 ---
 
@@ -376,3 +379,32 @@ FRONTEND_URL=http://localhost:5173
 # Procurement agent (optional)
 SERP_API_KEY=your_serpapi_key
 ```
+
+---
+
+## Deployment
+
+SurgiSense is designed to be easily deployable to modern cloud platforms.
+
+### Frontend (Vercel)
+
+The React frontend is deployed on **Vercel**.
+
+1. Connect your GitHub repository to Vercel.
+2. Set the Root Directory to `frontend`.
+3. Set the framework preset to **Vite**.
+4. Add any necessary environment variables in the Vercel dashboard.
+5. Deploy!
+
+### Backend (Render)
+
+The FastAPI backend is deployed on **Render** as a Web Service.
+
+1. Connect your GitHub repository to Render.
+2. Create a new Web Service.
+3. Set the Root Directory to `backend` (if you want the service rooted there) or leave empty and use CD commands.
+4. Build Command: `pip install -r requirements.txt` (Make sure your requirements are listed)
+5. Start Command: `uvicorn main:app --host 0.0.0.0 --port 10000`
+6. Add all the required environment variables from your `.env` file to the Render dashboard.
+
+*(Make sure your FastAPI CORS middleware configuration allows requests from your deployed Vercel frontend URL.)*
