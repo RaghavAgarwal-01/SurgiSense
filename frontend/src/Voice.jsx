@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Mic, Square, Loader2, MessageSquare, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import API_BASE from "api";
+import API_BASE from "./api";
 
 const Voice = () => {
     const [recording, setRecording] = useState(false);
