@@ -148,7 +148,7 @@ export default function Dashboard() {
   };
 
 
-const fetchProfile = async () => {
+  const fetchProfile = async () => {
     try {
       const res = await axios.get(`${API_BASE}/api/profile`, getAuthHeaders());
       setProfile(res.data);
@@ -521,8 +521,11 @@ const fetchProfile = async () => {
         <div className="max-w-7xl mx-auto px-5 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Link to="/" className="w-11 h-11 hover:scale-105 transition-transform flex-shrink-0">
-                <img src={surgiLogo} alt="SurgiSense" className="w-full h-full object-contain" style={{mixBlendMode:'screen', filter:'brightness(1.15) contrast(1.05)'}} />
+              <Link to="/" className="flex items-center gap-2.5 group">
+                {/* NEW TRANSPARENT LOGO (Smaller) */}
+                <div className="w-8 h-8 rounded-full bg-[#CBC3A5] flex items-center justify-center group-hover:scale-105 transition-transform flex-shrink-0">
+                  <Heart className="w-5 h-5 text-[#3E435D]" strokeWidth={2.5} />
+                </div>
               </Link>
               <div>
                 <h1 className="text-[#D3D0BC] text-base font-semibold leading-tight">{recoveryData.patientName}</h1>
@@ -572,8 +575,8 @@ const fetchProfile = async () => {
                             <div key={alert.id} className="px-4 py-3 hover:bg-[#D3D0BC]/10 transition-colors">
                               <div className="flex items-start gap-2.5">
                                 <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${alert.type === 'missed_dose' ? 'bg-red-400' :
-                                    alert.type === 'low_stock' ? 'bg-amber-400' :
-                                      'bg-blue-400'
+                                  alert.type === 'low_stock' ? 'bg-amber-400' :
+                                    'bg-blue-400'
                                   }`} />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs text-[#3E435D] font-medium leading-snug">{reformatAlertMessage(alert.message)}</p>
@@ -668,8 +671,8 @@ const fetchProfile = async () => {
             <div className="flex items-center gap-3">
               {adherenceScore !== null && (
                 <span className={`text-xs font-bold px-2 py-1 rounded-lg ${adherenceScore >= 80 ? 'bg-green-100 text-green-700' :
-                    adherenceScore >= 50 ? 'bg-amber-100 text-amber-700' :
-                      'bg-red-100 text-red-700'
+                  adherenceScore >= 50 ? 'bg-amber-100 text-amber-700' :
+                    'bg-red-100 text-red-700'
                   }`}>
                   {adherenceScore}% adherence
                 </span>

@@ -52,24 +52,24 @@ const verdictConfig = {
 };
 
 const workflowBadge = {
-  APPROVED:        { label: "Approved",        cls: "bg-emerald-100 text-emerald-700" },
+  APPROVED: { label: "Approved", cls: "bg-emerald-100 text-emerald-700" },
   REQUIRES_REVIEW: { label: "Requires Review", cls: "bg-amber-100 text-amber-700" },
-  DEFER:           { label: "Deferred",        cls: "bg-red-100 text-red-700" },
+  DEFER: { label: "Deferred", cls: "bg-red-100 text-red-700" },
 };
 
 export default function SurgeryReadiness() {
   const [isNavVisible, setIsNavVisible] = useState(true);
-  const [isMenuOpen, setIsMenuOpen]     = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const lastScrollYRef = useRef(0);
-  const headerRef      = useRef(null);
+  const headerRef = useRef(null);
 
-  const [loading, setLoading]       = useState(true);
-  const [report, setReport]         = useState(null);
-  const [readiness, setReadiness]   = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [report, setReport] = useState(null);
+  const [readiness, setReadiness] = useState(null);
   const [codeResult, setCodeResult] = useState(null);
   const [authResult, setAuthResult] = useState(null);
-  const [intake, setIntake]         = useState(null);
-  const [error, setError]           = useState("");
+  const [intake, setIntake] = useState(null);
+  const [error, setError] = useState("");
   const [evaluating, setEvaluating] = useState(false);
 
   useEffect(() => {
@@ -96,7 +96,7 @@ export default function SurgeryReadiness() {
     try {
       const [reportRes, intakeRes] = await Promise.all([
         axios.get(`${API_BASE}/api/intake-report`, { headers: authHeader() }),
-        axios.get(`${API_BASE}/api/my-intake`,     { headers: authHeader() }),
+        axios.get(`${API_BASE}/api/my-intake`, { headers: authHeader() }),
       ]);
       const r = reportRes.data;
       if (r.status === "no_report") {
@@ -130,7 +130,7 @@ export default function SurgeryReadiness() {
 
   const cfg = readiness ? (verdictConfig[readiness.verdict] || verdictConfig.INCOMPLETE) : null;
   const passedCount = readiness?.criteria?.filter(c => c.passed).length || 0;
-  const totalCount  = readiness?.criteria?.length || 0;
+  const totalCount = readiness?.criteria?.length || 0;
 
   return (
     <div className="min-h-screen bg-linear-to-b from-[#D3D0BC] to-[#D3D0BC]/90">
@@ -139,8 +139,11 @@ export default function SurgeryReadiness() {
         <div className="max-w-7xl mx-auto px-5 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Link to="/" className="w-11 h-11 hover:scale-105 transition-transform flex-shrink-0">
-                <img src={surgiLogo} alt="SurgiSense" className="w-full h-full object-contain" style={{mixBlendMode:'screen', filter:'brightness(1.15) contrast(1.05)'}} />
+              <Link to="/" className="flex items-center gap-2.5 group">
+                {/* NEW TRANSPARENT LOGO (Smaller) */}
+                <div className="w-8 h-8 rounded-full bg-[#CBC3A5] flex items-center justify-center group-hover:scale-105 transition-transform flex-shrink-0">
+                  <Heart className="w-5 h-5 text-[#3E435D]" strokeWidth={2.5} />
+                </div>
               </Link>
               <div>
                 <h1 className="text-[#D3D0BC] text-base font-semibold leading-tight">SurgiSense</h1>
@@ -149,10 +152,10 @@ export default function SurgeryReadiness() {
             </div>
             <div className="flex items-center gap-2">
               <div className="hidden md:flex items-center gap-1">
-                <Link to="/dashboard"         className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Home</Link>
-                <Link to="/chat"              className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Chat</Link>
+                <Link to="/dashboard" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Home</Link>
+                <Link to="/chat" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Chat</Link>
                 <Link to="/surgery-readiness" className="px-3 py-1.5 rounded-lg text-[#CBC3A5] text-sm font-medium bg-[#CBC3A5]/10">Readiness</Link>
-                <Link to="/pharmacy"          className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Pharmacy</Link>
+                <Link to="/pharmacy" className="px-3 py-1.5 rounded-lg text-[#D3D0BC]/70 text-sm font-medium hover:bg-[#CBC3A5]/10 transition-colors">Pharmacy</Link>
               </div>
               <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden text-[#D3D0BC] hover:bg-white/10 p-2 rounded-lg transition-colors">
                 {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -169,7 +172,7 @@ export default function SurgeryReadiness() {
             style={{ top: headerRef.current ? headerRef.current.offsetHeight + "px" : "80px" }}>
             <div className="px-5 py-3 space-y-1">
               {[{ to: "/dashboard", icon: Home, label: "Dashboard" }, { to: "/chat", icon: MessageCircle, label: "AI Chat" },
-                { to: "/surgery-readiness", icon: ShieldCheck, label: "Readiness" }, { to: "/pharmacy", icon: Pill, label: "Pharmacy" }
+              { to: "/surgery-readiness", icon: ShieldCheck, label: "Readiness" }, { to: "/pharmacy", icon: Pill, label: "Pharmacy" }
               ].map(item => (
                 <Link key={item.to} to={item.to} onClick={() => setIsMenuOpen(false)}
                   className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors">
@@ -316,10 +319,9 @@ export default function SurgeryReadiness() {
               <motion.section initial="hidden" animate="visible" variants={fadeIn}
                 className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-[#3E435D]/5">
                 <h3 className="text-[#3E435D] text-sm font-bold mb-3">Prior Authorization</h3>
-                <div className={`p-4 rounded-xl border flex items-start gap-3 ${
-                  authResult.status === "AUTO_APPROVED" ? "bg-emerald-50 border-emerald-100" :
+                <div className={`p-4 rounded-xl border flex items-start gap-3 ${authResult.status === "AUTO_APPROVED" ? "bg-emerald-50 border-emerald-100" :
                   authResult.status === "PRIOR_AUTH_REQUIRED" ? "bg-amber-50 border-amber-100" : "bg-[#D3D0BC]/20 border-[#CBC3A5]/40"
-                }`}>
+                  }`}>
                   {authResult.status === "AUTO_APPROVED" ? <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" /> : <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />}
                   <div>
                     <p className={`text-sm font-bold ${authResult.status === "AUTO_APPROVED" ? "text-emerald-700" : "text-amber-700"}`}>
@@ -361,11 +363,11 @@ export default function SurgeryReadiness() {
                   {[
                     { label: "Systolic BP", val: intake.bp_sys, unit: "mmHg" },
                     { label: "Diastolic BP", val: intake.bp_dia, unit: "mmHg" },
-                    { label: "Heart Rate",   val: intake.heart_rate, unit: "bpm" },
-                    { label: "SpO₂",         val: intake.spo2, unit: "%" },
-                    { label: "Temperature",  val: intake.temperature, unit: "°C" },
-                    { label: "Hemoglobin",   val: intake.hemoglobin, unit: "g/dL" },
-                    { label: "Blood Sugar",  val: intake.blood_sugar, unit: "mg/dL" },
+                    { label: "Heart Rate", val: intake.heart_rate, unit: "bpm" },
+                    { label: "SpO₂", val: intake.spo2, unit: "%" },
+                    { label: "Temperature", val: intake.temperature, unit: "°C" },
+                    { label: "Hemoglobin", val: intake.hemoglobin, unit: "g/dL" },
+                    { label: "Blood Sugar", val: intake.blood_sugar, unit: "mg/dL" },
                   ].filter(f => f.val).map((f, i) => (
                     <div key={i} className="bg-[#D3D0BC]/15 rounded-xl p-3">
                       <p className="text-[9px] text-[#9AA7B1] font-medium uppercase tracking-wide">{f.label}</p>

@@ -16,11 +16,13 @@ VALID_ICD10 = {
     "M17.12": "Primary osteoarthritis, left knee",
     "Z48.01": "Encounter for wound care — post-op",
     "Z09":    "Encounter for follow-up after completed treatment",
-    "K35.80": "Acute Appendicitis"
+    "K35.80": "Acute Appendicitis",
+    "ODTJ4ZZ": "Resection of Appendix, Percutaneous Endoscopic Approach"
 }
 
 VALID_CPT = {
     "44950": "Appendectomy",
+    "44970": "Laparoscopy, surgical, appendectomy",
     "47600": "Cholecystectomy",
     "66984": "Cataract extraction with IOL",
     "33533": "CABG, arterial",
@@ -32,17 +34,17 @@ VALID_CPT = {
 PAYER_RULES = {
     "PAYER-001": {
         "requires_prior_auth": ["27447", "33533", "66984"],
-        "auto_approve":        ["44950", "47600"],
+        "auto_approve":        ["44950", "44970", "47600"],
         "documentation_required": ["operative note", "pre-op labs"],
     },
     "PAYER-002": {
         "requires_prior_auth": ["33533", "27447"],
-        "auto_approve":        ["44950", "47600", "66984"],
+        "auto_approve":        ["44950", "44970", "47600", "66984"],
         "documentation_required": ["referral letter"],
     },
     "DEFAULT": {
         "requires_prior_auth": ["27447", "33533"],
-        "auto_approve":        ["44950", "47600", "66984", "99213", "99214"],
+        "auto_approve":        ["44950", "44970", "47600", "66984", "99213", "99214"],
         "documentation_required": [],
     },
 }
@@ -141,12 +143,14 @@ def validate_codes(icd10_code: str, cpt_code: str) -> dict:
         result["cpt"]["guardrail"] = "UNKNOWN_CODE — requires manual clinical review before claim submission"
 
     coherence_map = {
-        "K35.89": ["44950"],
+        "K35.89": ["44950", "44970"],
+        "K35.80": ["44950", "44970"],
         "K80.20": ["47600"],
         "H26.9":  ["66984"],
         "I25.10": ["33533"],
         "M17.11": ["27447"],
         "M17.12": ["27447"],
+        "ODTJ4ZZ": ["44950", "44970"],
     }
     if icd10_code in coherence_map:
         if cpt_code in coherence_map[icd10_code]:

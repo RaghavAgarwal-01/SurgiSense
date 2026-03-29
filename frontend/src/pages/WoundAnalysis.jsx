@@ -34,9 +34,9 @@ export default function WoundAnalysis() {
 
   useEffect(() => {
     axios.get(`${API_BASE}/api/profile`, getAuthHeaders())
-      .then(r => setProfile(r.data)).catch(() => {});
+      .then(r => setProfile(r.data)).catch(() => { });
     axios.get(`${API_BASE}/api/agent/alerts`, getAuthHeaders())
-      .then(r => { if (r.data?.alerts) setBellAlerts(r.data.alerts); }).catch(() => {});
+      .then(r => { if (r.data?.alerts) setBellAlerts(r.data.alerts); }).catch(() => { });
 
     const handleScroll = () => {
       const y = window.scrollY;
@@ -81,9 +81,9 @@ export default function WoundAnalysis() {
         <div className="max-w-7xl mx-auto px-5 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Link to="/" className="w-11 h-11 hover:scale-105 transition-transform flex-shrink-0">
-                <img src={surgiLogo} alt="SurgiSense" className="w-full h-full object-contain" style={{mixBlendMode:'screen', filter:'brightness(1.15) contrast(1.05)'}} />
-              </Link>
+              <div className="w-8 h-8 rounded-full bg-[#CBC3A5] flex items-center justify-center group-hover:scale-105 transition-transform flex-shrink-0">
+                <Heart className="w-5 h-5 text-[#3E435D]" strokeWidth={2.5} />
+              </div>
               <div>
                 <h1 className="text-[#D3D0BC] text-base font-semibold leading-tight">{recoveryData.patientName}</h1>
                 <p className="text-[#9AA7B1] text-xs">{recoveryData.surgeryType} · Day {recoveryData.recoveryDay}</p>
