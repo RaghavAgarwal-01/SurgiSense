@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { Heart, Shield, MessageCircle, ArrowRight, CheckCircle, Sparkles, Camera, FileText, Mic } from "lucide-react";
-import surgiLogo from "../assets/surgisense-logo.jpeg";
 import { motion } from "framer-motion";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback.jsx";
 
@@ -54,8 +53,9 @@ export default function Landing() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#3E435D]/95 backdrop-blur-md border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-11 h-11 group-hover:scale-105 transition-transform flex-shrink-0">
-              <img src={surgiLogo} alt="SurgiSense" className="w-full h-full object-contain" style={{mixBlendMode:'screen', filter:'brightness(1.15) contrast(1.05)'}} />
+            {/* NEW TRANSPARENT LOGO (Smaller) */}
+            <div className="w-8 h-8 rounded-full bg-[#CBC3A5] flex items-center justify-center group-hover:scale-105 transition-transform flex-shrink-0">
+              <Heart className="w-5 h-5 text-[#3E435D]" strokeWidth={2.5} />
             </div>
             <span className="text-[#D3D0BC] text-xl font-bold tracking-tight">SurgiSense</span>
           </Link>
@@ -95,10 +95,10 @@ export default function Landing() {
               <motion.div variants={fadeUp} custom={3} className="flex flex-col sm:flex-row gap-3">
                 <Link
                   to="/login"
-                 className="group bg-[#3E435D] text-[#D3D0BC] px-7 py-3.5 rounded-xl font-semibold text-base"
+                  className="group bg-[#3E435D] text-[#D3D0BC] px-7 py-3.5 rounded-xl font-semibold text-base"
                 >
                   Start Recovery
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform inline-block ml-2" />
                 </Link>
               </motion.div>
             </motion.div>
@@ -286,9 +286,9 @@ export default function Landing() {
           <motion.div variants={fadeUp} custom={2}>
             <Link
               to="/login"
-              className="group inline-flex items-center gap-2 bg-[#3E435D] text-[#D3D0BC]"
+              className="group inline-flex items-center gap-2 bg-[#3E435D] text-[#D3D0BC] px-6 py-3 rounded-lg font-semibold"
             >
-             Start Free Trial
+              Start Free Trial
               <ArrowRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </motion.div>
