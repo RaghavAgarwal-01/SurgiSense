@@ -32,7 +32,7 @@ import AdherenceCard from "../components/ui/AdherenceCard";
 import ReasoningChain from "../components/ui/ReasoningChain";
 import AgentChat from "../components/ui/AgentChat";
 import surgiLogo from "../assets/surgisense-logo.jpeg";
-import API_BASE from "../api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");

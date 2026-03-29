@@ -8,7 +8,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import surgiLogo from "../assets/surgisense-logo.jpeg";
-import API_BASE from "../api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 
 const fadeIn = {

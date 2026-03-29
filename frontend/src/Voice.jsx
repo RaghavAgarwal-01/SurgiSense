@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Mic, Square, Loader2, MessageSquare, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import API_BASE from "./api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 const Voice = () => {
     const [recording, setRecording] = useState(false);

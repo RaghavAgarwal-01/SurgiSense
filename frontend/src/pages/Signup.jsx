@@ -1,7 +1,8 @@
 import { useState } from "react"
 import axios from "axios"
 import { Link, useNavigate } from "react-router-dom"
-import API_BASE from "../api"
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 
 export default function Signup() {
     const navigate = useNavigate()

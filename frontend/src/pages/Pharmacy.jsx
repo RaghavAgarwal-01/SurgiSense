@@ -4,7 +4,7 @@ import { ChevronLeft, Pill, AlertCircle, Clock, CheckCircle, Package, MapPin, Na
 import { Progress } from "../components/ui/Progress";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
-import API_BASE from "../api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
   return {

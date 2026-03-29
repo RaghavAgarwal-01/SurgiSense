@@ -11,7 +11,7 @@ import ReactMarkdown from "react-markdown";
 import axios from "axios";
 import { useEffect, useRef } from "react";
 import surgiLogo from "../assets/surgisense-logo.jpeg";
-import API_BASE from "../api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const getAuthHeaders = () => ({
   headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
 });

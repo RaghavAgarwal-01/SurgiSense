@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Heart, Send, Mic, AlertTriangle, Shield, ChevronLeft, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
-import API_BASE from "../api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 export default function Chat() {
   const [messages, setMessages] = useState([
     {

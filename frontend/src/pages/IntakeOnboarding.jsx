@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import axios from "axios"
 import { useNavigate } from "react-router-dom"
-import API_BASE from "../api"; 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+; 
 const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` })
 
 const EMPTY_FORM = {
