@@ -1,6 +1,7 @@
 import { useState } from "react"
 import axios from "axios"
 import { Link, useNavigate } from "react-router-dom"
+import API_BASE from "../api"
 
 export default function Signup() {
     const navigate = useNavigate()
@@ -10,7 +11,7 @@ export default function Signup() {
 
     const signup = async () => {
         try {
-            const response = await axios.post("http://localhost:8000/auth/signup", {
+            const response = await axios.post(`${API_BASE}/auth/signup`, {
                 email: email.trim().toLowerCase(),
                 password,
             })
@@ -65,7 +66,7 @@ export default function Signup() {
                 </button>
 
                 <a
-                    href="http://localhost:8000/auth/google"
+                    href={`${API_BASE}/auth/google`}
                     className="mt-3 block w-full rounded-xl border border-[#3E435D]/20 bg-[#CBC3A5] px-4 py-3 text-center font-semibold text-[#3E435D] transition hover:bg-[#c2b998]"
                 >
                     Continue with Google

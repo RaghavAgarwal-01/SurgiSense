@@ -1,10 +1,6 @@
 .env
 .env*
 *.pem
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
 
 # Virtual Environments
 venv/

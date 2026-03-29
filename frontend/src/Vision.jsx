@@ -4,7 +4,7 @@ import axios from 'axios';
 import { Eye, UploadCloud, Loader2, FileWarning, Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const API_BASE = "http://localhost:8000";
+import API_BASE from "api";
 
 const Vision = ({ onAnalysisComplete }) => {
     const [preview, setPreview] = useState(null);

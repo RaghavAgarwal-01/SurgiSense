@@ -1,6 +1,7 @@
 import { useState } from "react"
 import axios from "axios"
 import { useNavigate } from "react-router-dom"
+import API_BASE from "../api";
 
 export default function ProfileSetup() {
 	const navigate = useNavigate()
@@ -28,7 +29,7 @@ export default function ProfileSetup() {
 			setIsSubmitting(true)
 
 			await axios.post(
-				"http://localhost:8000/api/create-profile",
+				`${API_BASE}/api/create-profile`,
 				{
 					patient_name: patientName.trim(),
 					surgery_type: surgeryType.trim(),
