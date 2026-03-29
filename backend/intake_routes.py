@@ -1,16 +1,15 @@
-
 import json
 import logging
-from datetime import datetime
-from models import Base, IntakeRecord
-import fitz
+import os
+from datetime import datetime, date as date_type, timedelta
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from groq import Groq
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import Session
 
-from database import Base, engine
 from dependencies import get_current_user, get_db
+from models import IntakeRecord, PatientProfile, RecoveryTask
 from services.intake_agent import extract_intake_from_pdf, run_intake_agent
 
 logger = logging.getLogger(__name__)
@@ -94,7 +93,6 @@ async def submit_intake(
         )
         db.add(record)
 
-        from models import PatientProfile
         from datetime import date as date_type
         
         today_str = date_type.today().isoformat()
@@ -123,14 +121,10 @@ async def submit_intake(
         # ── Generate recovery tasks from intake data ──────────────────────────
         tasks_generated = 0
         try:
-            from datetime import date as date_type, timedelta
-            from models import RecoveryTask
-
+    
     
             doc_text = json.dumps(intake_dict)
 
-            import os
-            from groq import Groq
             groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
             prompt = f"""You are a clinical AI. Generate a daily recovery task schedule for a patient.
@@ -446,10 +440,6 @@ async def update_intake(
     # Re-generate tasks from updated intake data
     tasks_generated = 0
     try:
-        from datetime import date as date_type, timedelta
-        from models import RecoveryTask
-        import os
-        from groq import Groq
         groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
         doc_text = json.dumps(merged)

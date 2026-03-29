@@ -78,7 +78,7 @@ class IntakeRecord(Base):
     user_id     = Column(Integer, ForeignKey("users.id"))
     intake_json = Column(Text)   # JSON: all intake form fields
     report_json = Column(Text)   # JSON: full agent audit report
-    created_at  = Column(String)
+    created_at  = Column(String, default=lambda: __import__('datetime').datetime.utcnow().isoformat())
 
     user = relationship("User", back_populates="intakes")
 
