@@ -82,15 +82,19 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
 
         # Create JWT token
         jwt_token = create_token({"user_id": db_user.id})
-
+        
+        # Redirect to frontend with token
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
         return RedirectResponse(
-            url=f"http://localhost:5173/oauth-success?token={jwt_token}",
+            url=f"{frontend_url}/oauth-success?token={jwt_token}",
             status_code=302
         )
         
     except OAuthError as e:
         logger.error(f"OAuth error: {str(e)}")
-        return RedirectResponse(url=f"http://localhost:5173/?error=oauth_failed")
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        return RedirectResponse(url=f"{frontend_url}/?error=oauth_failed")
     except Exception as e:
         logger.error(f"Callback error: {str(e)}", exc_info=True)
-        return RedirectResponse(url=f"http://localhost:5173/?error=server_error")
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        return RedirectResponse(url=f"{frontend_url}/?error=server_error")
