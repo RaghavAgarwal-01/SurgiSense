@@ -31,7 +31,7 @@ SurgiSense digitises discharge summaries, generates personalised day-by-day reco
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        React Frontend                        │
+│                        React Frontend                       │
 │  Vite · React Router · Tailwind CSS · Framer Motion         │
 │                                                             │
 │  Landing → Login/Signup → IntakeOnboarding → Dashboard      │
@@ -39,28 +39,28 @@ SurgiSense digitises discharge summaries, generates personalised day-by-day reco
 └────────────────────────┬────────────────────────────────────┘
                          │ HTTP / REST (localhost:8000)
 ┌────────────────────────▼────────────────────────────────────┐
-│                      FastAPI Backend                         │
+│                      FastAPI Backend                        │
 │                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │  Auth Routes │  │  Intake API  │  │    Main API      │  │
-│  │  /auth/*     │  │  /api/intake │  │  /api/*          │  │
-│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+│  │  Auth Routes │  │  Intake API  │  │    Main API      │   │
+│  │  /auth/*     │  │  /api/intake │  │  /api/*          │   │
+│  └──────────────┘  └──────────────┘  └──────────────────┘   │
 │                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
+│  ┌─────────────────────────────────────────────────────┐    │
 │  │                  Agent System                        │   │
-│  │  Agent Router → Medication Agent → Scheduler Agent  │   │
-│  │               → Intake Agent    → NLP Agent         │   │
-│  └─────────────────────────────────────────────────────┘   │
+│  │  Agent Router → Medication Agent → Scheduler Agent  │    │
+│  │               → Intake Agent    → NLP Agent         │    │
+│  └─────────────────────────────────────────────────────┘    │
 │                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │  RAG Chat    │  │ Wound Vision │  │  Rules / Eval    │  │
-│  │  FAISS +     │  │  Groq Vision │  │  rules_ai.py     │  │
-│  │  SentenceT.  │  │  API         │  │                  │  │
-│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+│  │  RAG Chat    │  │ Wound Vision │  │  Rules / Eval    │   │
+│  │  FAISS +     │  │  Groq Vision │  │  rules_ai.py     │   │
+│  │  SentenceT.  │  │  API         │  │                  │   │
+│  └──────────────┘  └──────────────┘  └──────────────────┘   │
 └────────────────────────┬────────────────────────────────────┘
                          │ SQLAlchemy ORM
 ┌────────────────────────▼────────────────────────────────────┐
-│              PostgreSQL (Neon serverless)                    │
+│              PostgreSQL (Neon serverless)                   │
 │  Users · PatientProfiles · RecoveryTasks · Medicines        │
 │  DischargeSummaries · MedicationLogs · AdherenceLogs        │
 │  IntakeRecords · AgentAlerts · MedicalRecords               │
