@@ -38,6 +38,76 @@ logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
+def _run_safe_migrations():
+    """Idempotent: adds any missing tables/columns at every startup."""
+    from sqlalchemy import text
+    TABLES = [
+        """CREATE TABLE IF NOT EXISTS intake_records (
+            id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id),
+            intake_json TEXT, report_json TEXT, created_at VARCHAR)""",
+        """CREATE TABLE IF NOT EXISTS discharge_summaries (
+            id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id),
+            patient_name VARCHAR, age INTEGER, gender VARCHAR,
+            surgery_type VARCHAR, surgery_date VARCHAR, surgery_phase VARCHAR DEFAULT 'post',
+            icd10_code VARCHAR, cpt_code VARCHAR, bp_sys INTEGER, bp_dia INTEGER,
+            heart_rate INTEGER, spo2 INTEGER, temperature VARCHAR, hemoglobin VARCHAR,
+            blood_sugar INTEGER, created_at VARCHAR)""",
+        """CREATE TABLE IF NOT EXISTS medicines (
+            id SERIAL PRIMARY KEY, summary_id INTEGER REFERENCES discharge_summaries(id),
+            user_id INTEGER REFERENCES users(id),
+            name VARCHAR NOT NULL, dosage VARCHAR, frequency VARCHAR,
+            total_quantity INTEGER, current_quantity INTEGER, dose_amount INTEGER DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS medication_logs (
+            id SERIAL PRIMARY KEY, medicine_id INTEGER REFERENCES medicines(id),
+            user_id INTEGER REFERENCES users(id),
+            action VARCHAR NOT NULL, quantity_change INTEGER NOT NULL,
+            remaining INTEGER NOT NULL, timestamp VARCHAR NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS adherence_logs (
+            id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id),
+            task_id INTEGER, medicine_id INTEGER, action VARCHAR NOT NULL,
+            scheduled_time VARCHAR, completed_time VARCHAR,
+            task_date VARCHAR, timestamp VARCHAR NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS agent_alerts (
+            id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id),
+            alert_type VARCHAR NOT NULL, message VARCHAR NOT NULL,
+            data_json TEXT, is_read INTEGER DEFAULT 0, created_at VARCHAR NOT NULL)""",
+    ]
+    COLUMNS = [
+        "ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS age INTEGER NULL",
+        "ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS gender VARCHAR NULL",
+        "ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS surgery_phase VARCHAR NULL DEFAULT 'post'",
+        "ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS icd10_code VARCHAR NULL",
+        "ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS cpt_code VARCHAR NULL",
+        "ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS payer_id VARCHAR NULL",
+        "ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS recovery_days_total INTEGER DEFAULT 90",
+        "ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS pdf_upload_date VARCHAR NULL",
+        "ALTER TABLE patient_profiles ADD COLUMN IF NOT EXISTS next_appointment_date VARCHAR NULL",
+        "ALTER TABLE recovery_tasks ADD COLUMN IF NOT EXISTS task_date VARCHAR NULL",
+        "ALTER TABLE recovery_tasks ADD COLUMN IF NOT EXISTS is_critical INTEGER DEFAULT 0",
+        "ALTER TABLE medicines ADD COLUMN IF NOT EXISTS dose_amount INTEGER NULL DEFAULT 1",
+        "ALTER TABLE medicines ADD COLUMN IF NOT EXISTS total_quantity INTEGER NULL",
+        "ALTER TABLE medicines ADD COLUMN IF NOT EXISTS current_quantity INTEGER NULL",
+        "ALTER TABLE adherence_logs ADD COLUMN IF NOT EXISTS scheduled_time VARCHAR NULL",
+        "ALTER TABLE adherence_logs ADD COLUMN IF NOT EXISTS completed_time VARCHAR NULL",
+        "ALTER TABLE adherence_logs ADD COLUMN IF NOT EXISTS task_date VARCHAR NULL",
+        "ALTER TABLE adherence_logs ADD COLUMN IF NOT EXISTS task_id INTEGER NULL",
+        "ALTER TABLE adherence_logs ADD COLUMN IF NOT EXISTS medicine_id INTEGER NULL",
+        "ALTER TABLE agent_alerts ADD COLUMN IF NOT EXISTS data_json TEXT NULL",
+    ]
+    db = SessionLocal()
+    try:
+        for sql in TABLES:
+            try: db.execute(text(sql)); db.commit()
+            except Exception as e: db.rollback(); logger.warning(f"Migration table skipped: {e}")
+        for sql in COLUMNS:
+            try: db.execute(text(sql)); db.commit()
+            except Exception as e: db.rollback(); logger.warning(f"Migration col skipped: {e}")
+        logger.info("Startup migrations complete")
+    finally:
+        db.close()
+
+_run_safe_migrations()
+
 rag = MedicalRAGService()
 app = FastAPI(title="SurgiSense AI Backend")
 
@@ -1082,20 +1152,17 @@ def search_medicine_prices(medicine: str):
         
         real_vendors = []
         
-        # Parse the real live shopping results
         if "shopping_results" in data:
             seen_vendors = set()
             
             for item in data["shopping_results"]:
                 vendor_name = item.get("source", "Online Pharmacy")
-                
-                # 1. DEDUPLICATION: Skip if we already have a price from this vendor
+
                 if vendor_name in seen_vendors:
                     continue
                     
                 seen_vendors.add(vendor_name)
-                
-                # 2. AGENTIC DATA SANITIZATION: Clean up Google's messy tracking URLs
+
                 raw_link = item.get("link") or item.get("product_link") or f"https://www.google.com/search?tbm=shop&q={medicine}"
                 
                 if "google.com" in raw_link and ("url?" in raw_link or "aclk?" in raw_link):
@@ -1116,11 +1183,9 @@ def search_medicine_prices(medicine: str):
                     "url": raw_link
                 })
                 
-                # 3. Stop once we have exactly 3 unique, sanitized pharmacies
                 if len(real_vendors) == 3:
                     break
-        
-        # Fallback just in case Google Shopping hides results
+
         if not real_vendors:
             real_vendors = [
                 {"vendor": "Apollo Pharmacy", "price": "Check site", "delivery": "Fast delivery", "url": f"https://www.apollopharmacy.in/search-medicines/{medicine}"},

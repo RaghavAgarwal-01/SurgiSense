@@ -11,7 +11,6 @@ import json
 from groq import Groq
 
 # Initialize Groq client
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 def evaluate_patient(v):
     """
@@ -43,6 +42,7 @@ def generate_clinical_reasoning(vitals_summary, status, risk_factors, clinical_f
     - Surgery type and ASA class
     """
     try:
+        groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
         prompt = f"""You are an expert clinical assistant providing surgical readiness assessments. 
 Generate a detailed, professional clinical reasoning narrative for the following patient assessment:
 
