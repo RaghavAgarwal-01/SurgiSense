@@ -78,7 +78,7 @@ export default function Landing() {
             <motion.div initial="hidden" animate="visible" variants={stagger}>
               <motion.div variants={fadeUp} custom={0} className="inline-flex items-center gap-2 bg-[#3E435D]/10 backdrop-blur-sm border border-[#3E435D]/10 px-4 py-2 rounded-full mb-6">
                 <Sparkles className="w-4 h-4 text-[#3E435D]" />
-                <span className="text-[#3E435D] text-sm font-medium">AI-Powered Post-Surgical Recovery</span>
+                <span className="text-[#3E435D] text-sm font-medium">AI-Powered Pre and Post-Surgical Recovery</span>
               </motion.div>
 
               <motion.h1 variants={fadeUp} custom={1} className="text-[#3E435D] text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] tracking-tight mb-6">

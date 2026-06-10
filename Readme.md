@@ -75,7 +75,7 @@ SurgiSense digitises discharge summaries, generates personalised day-by-day reco
 | ORM | SQLAlchemy |
 | Database | PostgreSQL (Neon serverless) |
 | LLM | Groq API (`llama-3.3-70b-versatile`) |
-| RAG | FAISS + `sentence-transformers` (MiniLM-L12-v2) |
+| RAG | FAISS + `sentence-transformers` (`all-MiniLM-L6-v2`) |
 | PDF parsing | PyMuPDF (`fitz`) |
 | Auth | JWT (custom) + Google OAuth 2.0 |
 | Background jobs | Python `threading` (scheduler agent) |
@@ -123,7 +123,12 @@ SurgiSense/
 │       ├── record_digitization.py  # Discharge summary → structured JSON
 │       ├── rules_ai.py          # Clinical vitals evaluation rules
 │       ├── wound_analysis.py    # Wound image → severity assessment
-│       └── speech_to_text.py   # Audio → transcript (Groq Whisper)
+│       └── speech_to_text.py   # Audio → transcript (SarvamAI saaras:v3)
+│   ├── ingest_pdfs.py           # Batch PDF → FAISS index builder
+│   ├── data/                    # Persisted FAISS index + chunk metadata
+│   ├── pdfs/                    # Drop medical PDFs here for ingestion
+│   └── eval/
+│       └── retrieval_eval.py    # Precision@3 retrieval evaluation script
 │
 └── frontend/src/
     ├── main.jsx                 # React entry point
@@ -216,7 +221,7 @@ SurgiSense/
 |---|---|---|
 | POST | `/api/chat` | Ask a question against the RAG vector store |
 | POST | `/api/analyze-wound` | Upload wound image → severity score + clinical assessment |
-| POST | `/api/voice-to-text` | Upload audio → transcript via Groq Whisper |
+| POST | `/api/voice-to-text` | Upload audio → transcript via SarvamAI (saaras:v3) |
 | POST | `/api/evaluate` | Evaluate patient vitals against clinical readiness rules |
 
 #### Agent System — `/api/agent`
@@ -280,9 +285,9 @@ Unified event dispatcher that accepts any supported event type and routes it to 
 
 | File | Responsibility |
 |---|---|
-| `chat.py` | RAG service — chunks + embeds document text into an in-memory FAISS index using `paraphrase-multilingual-MiniLM-L12-v2`; answers questions with top-3 retrieved chunks as context |
+| `chat.py` | RAG service — embeds document chunks with `all-MiniLM-L6-v2`, stores in FAISS `IndexFlatL2`, retrieves top-3 via semantic search; answers questions using Groq LLM with retrieved context |
 | `wound_analysis.py` | Sends wound images to Groq Vision API; returns a markdown clinical assessment with a 1–10 severity score |
-| `speech_to_text.py` | Transcribes audio via Groq Whisper |
+| `speech_to_text.py` | Transcribes audio via SarvamAI (saaras:v3, codemix mode for Hindi-English) |
 | `record_digitization.py` | Extracts structured JSON from discharge PDFs using an LLM prompt |
 | `rules_ai.py` | Rule-based + AI vitals evaluation for surgery readiness scoring |
 | `intake_agent.py` | PDF → intake form extraction, ICD-10/CPT validation, prior-auth simulation, auditable reasoning log |
