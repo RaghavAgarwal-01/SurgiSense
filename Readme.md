@@ -4,7 +4,7 @@
 
 > AI-powered surgical recovery platform — from discharge to full recovery, guided by intelligent agents.
 
-SurgiSense digitises discharge summaries, generates personalised day-by-day recovery schedules, tracks medication adherence, monitors wound healing through computer vision, and surfaces real-time alerts when a patient falls behind — all through a multi-agent backend and a mobile-first React frontend.
+SurgiSense digitises discharge summaries, generates personalised day-by-day recovery schedules, tracks medication adherence, monitors wound healing through computer vision, and surfaces real-time alerts when a patient falls behind, all through a multi-agent backend and a mobile-first React frontend.
 
 ---
 
